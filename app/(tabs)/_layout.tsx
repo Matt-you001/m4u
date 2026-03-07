@@ -1,33 +1,77 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
-import React from 'react';
-
-import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useEffect, useState } from 'react';
+import api from '../../utils/api';
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
+  const [plan, setPlan] = useState<'free' | 'basic' | 'premium'>('free');
+  const [credits, setCredits] = useState<number>(0);
+
+  useEffect(() => {
+ const loadUser = async () => {
+    try {
+      const res = await api.get('/user/me');
+      setPlan(res.data.plan);
+
+      const totalCredits =
+        (res.data.credits ?? 0) + (res.data.extra_credits ?? 0);
+
+      setCredits(totalCredits);
+    } catch (err: any) {
+      if (err.response?.status !== 401) {
+        console.warn('Failed to load user:', err.response?.status);
+      }
+      setPlan('free');
+      setCredits(0);
+    }
+  };
+
+
+  loadUser();
+}, []);
+
 
   return (
-    <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
-        headerShown: false,
-        tabBarButton: HapticTab,
-      }}>
+    <Tabs screenOptions={{ headerShown: false }}>
       <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="home-outline" size={size} color={color} />
+          ),
         }}
       />
+
       <Tabs.Screen
-        name="explore"
+        name="message-gen"
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          title: 'Generator',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="create-outline" size={size} color={color} />
+          ),
+        }}
+      />
+
+
+      <Tabs.Screen
+        name="message-resp"
+        options={{
+          title: 'Responder',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="chatbubble-ellipses-outline" size={size} color={color} />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
+        name="history"
+        options={{
+          title: 'History',
+          href: plan === 'free' ? null : undefined,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="time-outline" size={size} color={color} />
+          ),
         }}
       />
     </Tabs>
