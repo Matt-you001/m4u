@@ -1,0 +1,47 @@
+I0217 17:19:17.045326   12768 load.go:31] Reloading schema and connectors...
+W0217 17:19:17.100986   12768 control.go:74] [/emulator/backend 7388] connector "example" has errors: example\queries.gql:21:5: Cannot query field "id" on type "AutoResponse_KeyOutput".
+example\queries.gql:13:3: Field "autoResponse_insert" must not have a selection since type "AutoResponse_KeyOutput" has no subfields.
+example\queries.gql:42:5: Cannot query field "id" on type "User_KeyOutput".
+example\queries.gql:41:3: Field "user_update" must not have a selection since type "User_KeyOutput" has no subfields.
+
+sources: example\queries.gql [1069B] 
+I0217 17:19:17.100986   12768 control.go:100] [/emulator/backend 7388] UpdateResources(): done
+Main schema: sources: schema\schema.gql [804B] 
+Connector "example": sources: example\queries.gql [1069B] 
+E0217 17:19:17.101935   12768 load.go:73] Could not load sources: 
+Errors: example\queries.gql:21:5: Cannot query field "id" on type "AutoResponse_KeyOutput".
+example\queries.gql:13:3: Field "autoResponse_insert" must not have a selection since type "AutoResponse_KeyOutput" has no subfields.
+example\queries.gql:42:5: Cannot query field "id" on type "User_KeyOutput".
+example\queries.gql:41:3: Field "user_update" must not have a selection since type "User_KeyOutput" has no subfields.
+I0217 17:19:17.107358   12768 collector.go:107] schema extensions wrote into "C:\\Users\\USER\\Desktop\\m4u\\backend\\dataconnect\\.dataconnect\\schema"
+Generated sources: main\query.gql [6262B] main\mutation.gql [17013B] prelude.gql [80729B] main\implicit.gql [2328B] main\input.gql [45517B] main\relation.gql [24737B] 
+I0217 17:19:17.109389   12768 load.go:74] Finished reloading
+I0217 17:19:17.113767   12768 dev.go:104] Listening on address (HTTP + gRPC): 127.0.0.1:9399
+I0217 17:19:17.115821   12768 dev.go:104] Listening on address (HTTP + gRPC): [::1]:9399
+I0217 17:19:22.901452   12768 migrate.go:24] Running migration SQL:
+Step 1: CREATE EXTENSION IF NOT EXISTS "uuid-ossp"
+Step 2: CREATE TABLE "public"."user" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "created_at" timestamptz NOT NULL, "default_translation_language" text NULL, "email" text NULL, "password_hash" text NOT NULL, "profile_picture_u_r_l" text NULL, "username" text NOT NULL, PRIMARY KEY ("id"))
+Step 3: CREATE TABLE "public"."auto_response" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "user_id" uuid NOT NULL, "created_at" timestamptz NOT NULL, "enabled" boolean NULL, "keywords" text NULL, "name" text NOT NULL, "response_text" text NOT NULL, PRIMARY KEY ("id"), CONSTRAINT "auto_response_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "public"."user" ("id") ON DELETE CASCADE)
+Step 4: CREATE INDEX "auto_response_userId_idx" ON "public"."auto_response" ("user_id")
+Step 5: CREATE TABLE "public"."contact" ("owner_id" uuid NOT NULL, "contact_user_id" uuid NOT NULL, "created_at" timestamptz NOT NULL, "nickname" text NULL, PRIMARY KEY ("owner_id", "contact_user_id"), CONSTRAINT "contact_contact_user_id_fkey" FOREIGN KEY ("contact_user_id") REFERENCES "public"."user" ("id") ON DELETE CASCADE, CONSTRAINT "contact_owner_id_fkey" FOREIGN KEY ("owner_id") REFERENCES "public"."user" ("id") ON DELETE CASCADE)
+Step 6: CREATE INDEX "contact_contactUserId_idx" ON "public"."contact" ("contact_user_id")
+Step 7: CREATE INDEX "contact_ownerId_idx" ON "public"."contact" ("owner_id")
+Step 8: CREATE TABLE "public"."conversation" ("participant1_id" uuid NOT NULL, "participant2_id" uuid NOT NULL, "created_at" timestamptz NOT NULL, "updated_at" timestamptz NOT NULL, PRIMARY KEY ("participant1_id", "participant2_id"), CONSTRAINT "conversation_participant1_id_fkey" FOREIGN KEY ("participant1_id") REFERENCES "public"."user" ("id") ON DELETE CASCADE, CONSTRAINT "conversation_participant2_id_fkey" FOREIGN KEY ("participant2_id") REFERENCES "public"."user" ("id") ON DELETE CASCADE)
+Step 9: CREATE INDEX "conversation_participant1Id_idx" ON "public"."conversation" ("participant1_id")
+Step 10: CREATE INDEX "conversation_participant2Id_idx" ON "public"."conversation" ("participant2_id")
+Step 11: CREATE TABLE "public"."message" ("id" uuid NOT NULL DEFAULT uuid_generate_v4(), "sender_id" uuid NOT NULL, "content" text NOT NULL, "conversation_id" uuid NOT NULL, "created_at" timestamptz NOT NULL, "detected_language" text NULL, "translated_content" text NULL, "translation_language" text NULL, PRIMARY KEY ("id"), CONSTRAINT "message_sender_id_fkey" FOREIGN KEY ("sender_id") REFERENCES "public"."user" ("id") ON DELETE CASCADE)
+Step 12: CREATE INDEX "message_senderId_idx" ON "public"."message" ("sender_id")
+W0217 17:19:23.130858   12768 control.go:74] [/emulator/backend 25c8] connector "example" has errors: example\queries.gql:21:5: Cannot query field "id" on type "AutoResponse_KeyOutput".
+example\queries.gql:13:3: Field "autoResponse_insert" must not have a selection since type "AutoResponse_KeyOutput" has no subfields.
+example\queries.gql:42:5: Cannot query field "id" on type "User_KeyOutput".
+example\queries.gql:41:3: Field "user_update" must not have a selection since type "User_KeyOutput" has no subfields.
+
+sources: example\queries.gql [1069B] 
+I0217 17:19:23.130858   12768 control.go:100] [/emulator/backend 25c8] UpdateResources(): done
+Main schema: sources: schema\schema.gql [804B] 
+Connector "example": sources: example\queries.gql [1069B] 
+I0217 17:19:23.130858   12768 service.go:149] [/emulator/backend 25c8] while configuring to server.Settings{ConnectionString:"dbname='fdcdb' host='127.0.0.1' port='5433' sslmode='disable' dbname='fdcdb'", MaxOpenConnection:0, UseDummy:false, EnableGoogleMLIntegration:false, SchemaValidationMode:""}, failed to reload last live sources: 
+Errors: example\queries.gql:21:5: Cannot query field "id" on type "AutoResponse_KeyOutput".
+example\queries.gql:13:3: Field "autoResponse_insert" must not have a selection since type "AutoResponse_KeyOutput" has no subfields.
+example\queries.gql:42:5: Cannot query field "id" on type "User_KeyOutput".
+example\queries.gql:41:3: Field "user_update" must not have a selection since type "User_KeyOutput" has no subfields.

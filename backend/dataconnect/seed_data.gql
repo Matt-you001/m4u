@@ -1,0 +1,61 @@
+mutation CreateDemoData @transaction @auth(level: USER, insecureReason: "Seed data mutation for testing, should not be publicly accessible.") {
+  user_insertMany(data: [
+    {
+      id: "a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1",
+      username: "userA",
+      email: "userA@example.com",
+      passwordHash: "hash1",
+      createdAt: "2023-01-01T10:00:00Z"
+    },
+    {
+      id: "b2b2b2b2-b2b2-b2b2-b2b2-b2b2b2b2b2b2",
+      username: "userB",
+      email: "userB@example.com",
+      passwordHash: "hash2",
+      createdAt: "2023-01-01T10:05:00Z"
+    }
+  ])
+  conversation_insertMany(data: [
+    {
+      participant1Id: "a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1",
+      participant2Id: "b2b2b2b2-b2b2-b2b2-b2b2-b2b2b2b2b2b2",
+      createdAt: "2023-01-01T10:10:00Z",
+      updatedAt: "2023-01-01T10:10:00Z"
+    }
+  ])
+  message_insertMany(data: [
+    {
+      id: "c3c3c3c3-c3c3-c3c3-c3c3-c3c3c3c3c3c3",
+      senderId: "a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1",
+      content: "Hi userB!",
+      conversationId: "b2b2b2b2-b2b2-b2b2-b2b2-b2b2b2b2b2b2", # This will be the ID of the conversation between userA and userB
+      createdAt: "2023-01-01T10:11:00Z"
+    },
+    {
+      id: "d4d4d4d4-d4d4-d4d4-d4d4-d4d4d4d4d4d4",
+      senderId: "b2b2b2b2-b2b2-b2b2-b2b2-b2b2b2b2b2b2",
+      content: "Hello userA!",
+      conversationId: "b2b2b2b2-b2b2-b2b2-b2b2-b2b2b2b2b2b2",
+      createdAt: "2023-01-01T10:12:00Z"
+    }
+  ])
+  contact_insertMany(data: [
+    {
+      ownerId: "a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1",
+      contactUserId: "b2b2b2b2-b2b2-b2b2-b2b2-b2b2b2b2b2b2",
+      createdAt: "2023-01-01T10:15:00Z",
+      nickname: "My Friend UserB"
+    }
+  ])
+  autoResponse_insertMany(data: [
+    {
+      id: "e5e5e5e5-e5e5-e5e5-e5e5-e5e5e5e5e5e5",
+      userId: "a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1",
+      createdAt: "2023-01-01T10:20:00Z",
+      enabled: true,
+      keywords: "hi,hello",
+      name: "Greeting Response",
+      responseText: "Hello! How can I help you today?"
+    }
+  ])
+}

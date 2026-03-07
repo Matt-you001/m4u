@@ -1,0 +1,44 @@
+query ListMyAutoResponses @auth(level: USER, insecureReason: "This query lists auto-responses for the current logged-in user.") {
+  autoResponses(where: {userId: {eq_expr: "auth.uid"}}) {
+    id
+    name
+    keywords
+    responseText
+    enabled
+    createdAt
+  }
+}
+
+mutation CreateMyAutoResponse($name: String!, $responseText: String!, $keywords: String, $enabled: Boolean) @auth(level: USER) {
+  autoResponse_insert(data: {
+    userId_expr: "auth.uid",
+    name: $name,
+    responseText: $responseText,
+    keywords: $keywords,
+    enabled: $enabled,
+    createdAt_expr: "request.time"
+  }) {
+    id
+  }
+}
+
+query GetMyContacts @auth(level: USER, insecureReason: "This query retrieves contacts for the currently logged-in user.") {
+  contacts(where: {ownerId: {eq_expr: "auth.uid"}}) {
+    owner {
+      id
+      username
+    }
+    contactUser {
+      id
+      username
+    }
+    nickname
+    createdAt
+  }
+}
+
+mutation UpdateMyUsername($newUsername: String!) @auth(level: USER) {
+  user_update(key: {id_expr: "auth.uid"}, data: {username: $newUsername}) {
+    id
+  }
+}

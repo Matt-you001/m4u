@@ -1,0 +1,46 @@
+extend type AutoResponse {
+  """
+  ✨ Implicit primary key field. It's a UUID column default to a generated new value. See `@table` for how to customize it.
+  """
+  id: UUID! @default(expr: "uuidV4()") @fdc_generated(from: "AutoResponse", purpose: IMPLICIT_KEY_FIELD)
+  """
+  ✨ Implicit foreign key field based on `AutoResponse`.`user`. It must match the value of `User`.`id`. See `@ref` for how to customize it.
+  """
+  userId: UUID! @fdc_generated(from: "AutoResponse.user", purpose: IMPLICIT_REF_FIELD)
+}
+extend type Contact {
+  """
+  ✨ Implicit foreign key field based on `Contact`.`owner`. It must match the value of `User`.`id`. See `@ref` for how to customize it.
+  """
+  ownerId: UUID! @fdc_generated(from: "Contact.owner", purpose: IMPLICIT_REF_FIELD)
+  """
+  ✨ Implicit foreign key field based on `Contact`.`contactUser`. It must match the value of `User`.`id`. See `@ref` for how to customize it.
+  """
+  contactUserId: UUID! @fdc_generated(from: "Contact.contactUser", purpose: IMPLICIT_REF_FIELD)
+}
+extend type Conversation {
+  """
+  ✨ Implicit foreign key field based on `Conversation`.`participant1`. It must match the value of `User`.`id`. See `@ref` for how to customize it.
+  """
+  participant1Id: UUID! @fdc_generated(from: "Conversation.participant1", purpose: IMPLICIT_REF_FIELD)
+  """
+  ✨ Implicit foreign key field based on `Conversation`.`participant2`. It must match the value of `User`.`id`. See `@ref` for how to customize it.
+  """
+  participant2Id: UUID! @fdc_generated(from: "Conversation.participant2", purpose: IMPLICIT_REF_FIELD)
+}
+extend type Message {
+  """
+  ✨ Implicit primary key field. It's a UUID column default to a generated new value. See `@table` for how to customize it.
+  """
+  id: UUID! @default(expr: "uuidV4()") @fdc_generated(from: "Message", purpose: IMPLICIT_KEY_FIELD)
+  """
+  ✨ Implicit foreign key field based on `Message`.`sender`. It must match the value of `User`.`id`. See `@ref` for how to customize it.
+  """
+  senderId: UUID! @fdc_generated(from: "Message.sender", purpose: IMPLICIT_REF_FIELD)
+}
+extend type User {
+  """
+  ✨ Implicit primary key field. It's a UUID column default to a generated new value. See `@table` for how to customize it.
+  """
+  id: UUID! @default(expr: "uuidV4()") @fdc_generated(from: "User", purpose: IMPLICIT_KEY_FIELD)
+}

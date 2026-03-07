@@ -1,0 +1,41 @@
+type User @table {
+  username: String!
+  passwordHash: String!
+  createdAt: Timestamp!
+  email: String
+  profilePictureURL: String
+  defaultTranslationLanguage: String
+}
+
+type Contact @table(key: ["owner", "contactUser"]) {
+  owner: User!
+  contactUser: User!
+  createdAt: Timestamp!
+  nickname: String
+}
+
+type Conversation @table(key: ["participant1", "participant2"]) {
+  participant1: User!
+  participant2: User!
+  createdAt: Timestamp!
+  updatedAt: Timestamp!
+}
+
+type Message @table {
+  conversationId: UUID!
+  sender: User!
+  content: String!
+  createdAt: Timestamp!
+  translatedContent: String
+  detectedLanguage: String
+  translationLanguage: String
+}
+
+type AutoResponse @table {
+  user: User!
+  name: String!
+  responseText: String!
+  createdAt: Timestamp!
+  keywords: String
+  enabled: Boolean
+}
