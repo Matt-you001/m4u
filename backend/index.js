@@ -32,32 +32,6 @@ app.get("/hello", (req, res) => {
   res.send("Function running ✅");
 });
 
-/**
- * ✅ Debug JWT (does NOT leak secret)
- */
-app.get("/debug/jwt", (req, res) => {
-  const secret = process.env.JWT_SECRET || "";
-  res.json({
-    hasJWT_SECRET: !!secret,
-    jwtSecretLen: secret.length,
-  });
-});
-
-/**
- * ✅ Debug DB info (does NOT leak password)
- */
-app.get("/debug/dbinfo", async (req, res) => {
-  try {
-    const url = process.env.DB_URL || "";
-    res.json({
-      hasDB_URL: !!process.env.DB_URL,
-      dbUrlStartsWith: url.slice(0, 30),
-    });
-  } catch (e) {
-    res.status(500).json({ ok: false });
-  }
-});
-
 // ================= AUTH =================
 
 app.post("/auth/signup", async (req, res) => {
@@ -105,7 +79,17 @@ app.post("/auth/signup", async (req, res) => {
       { expiresIn: "7d" }
     );
 
-    res.status(201).json({ message: "Signup successful", token, user });
+    res.status(201).json({
+      message: "Signup successful",
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        plan: user.plan,
+        credits: user.credits,
+        extraCredits: user.extra_credits,
+      },
+    });
   } catch (err) {
     console.error("Signup error:", err);
     res.status(500).json({ message: "Internal server error" });
@@ -164,6 +148,66 @@ app.post("/auth/login", async (req, res) => {
   } catch (err) {
     console.error("Login error:", err);
     res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// ================= GOOGLE AUTH =================
+
+app.post("/auth/google", async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ message: "Email required" });
+    }
+
+    let result = await pool.query(
+      `SELECT id, email, plan, credits, extra_credits
+       FROM users
+       WHERE email = $1`,
+      [email]
+    );
+
+    let user;
+
+    if (result.rows.length === 0) {
+      const insert = await pool.query(
+        `INSERT INTO users (email, plan, credits, extra_credits)
+         VALUES ($1, 'free', 15, 0)
+         RETURNING id, email, plan, credits, extra_credits`,
+        [email]
+      );
+
+      user = insert.rows[0];
+    } else {
+      user = result.rows[0];
+    }
+
+    const token = jwt.sign(
+      {
+        id: user.id,
+        plan: user.plan,
+        credits: user.credits,
+        extraCredits: user.extra_credits,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        plan: user.plan,
+        credits: user.credits,
+        extraCredits: user.extra_credits,
+      },
+    });
+
+  } catch (err) {
+    console.error("Google auth error:", err);
+    res.status(500).json({ message: "Google auth failed" });
   }
 });
 
