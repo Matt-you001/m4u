@@ -47,7 +47,10 @@ router.post("/upgrade", authenticateUser, async (req, res) => {
   }
 });
 
-router.get('/user/me', authenticateUser, async (req, res) => {
+/**
+ * GET /user/me
+ */
+router.get("/me", authenticateUser, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `
@@ -60,11 +63,11 @@ router.get('/user/me', authenticateUser, async (req, res) => {
       FROM users
       WHERE id = $1
       `,
-      [req.user.userId]
+      [req.user.id]
     );
 
     if (rows.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
+      return res.status(404).json({ error: "User not found" });
     }
 
     const user = rows[0];
@@ -78,8 +81,8 @@ router.get('/user/me', authenticateUser, async (req, res) => {
       totalCredits: user.credits + user.extra_credits,
     });
   } catch (err) {
-    console.error('ME endpoint error:', err);
-    res.status(500).json({ error: 'Failed to load user' });
+    console.error("ME endpoint error:", err);
+    res.status(500).json({ error: "Failed to load user" });
   }
 });
 

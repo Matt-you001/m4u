@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "080704a9-45c1-41ca-a540-24c76e8e0e6e"
+      }
+    },
+    "android": {
+      "package": "com.mattonah.backend"
+    }
+  }
+}
