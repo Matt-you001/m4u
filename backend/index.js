@@ -255,6 +255,81 @@ Context: ${context || "None"}
   }
 });
 
+// Respond
+app.post("/respond", authenticateUser, creditGuard, async (req, res) => {
+  try {
+    const { message, tone, language } = req.body;
+
+    if (!message) {
+      return res.status(400).json({ error: "Message required" });
+    }
+
+    const finalLanguage = language?.trim() || "English";
+
+    const prompt = `
+Respond in ${finalLanguage}.
+
+User message:
+"${message}"
+
+Tone: ${tone || "polite"}
+`;
+
+    const openai = getOpenAI();
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.7,
+    });
+
+    res.json({
+      result: completion.choices[0].message.content,
+      remainingCredits: req.remainingCredits,
+    });
+  } catch (error) {
+    console.error("❌ RESPOND ERROR:", error);
+    res.status(500).json({ message: "AI response failed" });
+  }
+});
+
+// Translate
+app.post("/translate", authenticateUser, creditGuard, async (req, res) => {
+  try {
+    const { message, targetLanguage } = req.body;
+
+    if (!message) {
+      return res.status(400).json({ error: "Message is required" });
+    }
+
+    const finalLanguage = targetLanguage?.trim() || "English";
+
+    const openai = getOpenAI();
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a translation engine. Translate text exactly and output ONLY the translated text.",
+        },
+        {
+          role: "user",
+          content: `Translate the following text into ${finalLanguage}:\n\n"${message}"`,
+        },
+      ],
+      temperature: 0,
+    });
+
+    res.json({
+      result: completion.choices[0].message.content,
+      remainingCredits: req.remainingCredits,
+    });
+  } catch (error) {
+    console.error("❌ TRANSLATE ERROR:", error);
+    res.status(500).json({ message: "Translation failed" });
+  }
+});
+
 const PORT = process.env.PORT || 10000;
 
 app.listen(PORT, () => {
