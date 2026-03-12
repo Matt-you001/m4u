@@ -251,7 +251,10 @@ Context: ${context || "None"}
     });
   } catch (error) {
     console.error("❌ AI ERROR:", error);
-    res.status(500).json({ message: "AI generation failed" });
+    res.status(500).json({
+      message: "AI generation failed",
+      debug: error.message,
+    });
   }
 });
 
@@ -288,7 +291,10 @@ Tone: ${tone || "polite"}
     });
   } catch (error) {
     console.error("❌ RESPOND ERROR:", error);
-    res.status(500).json({ message: "AI response failed" });
+    res.status(500).json({
+      message: "AI response failed",
+      debug: error.message,
+    });
   }
 });
 
@@ -326,7 +332,10 @@ app.post("/translate", authenticateUser, creditGuard, async (req, res) => {
     });
   } catch (error) {
     console.error("❌ TRANSLATE ERROR:", error);
-    res.status(500).json({ message: "Translation failed" });
+    res.status(500).json({
+      message: "AI translation failed",
+      debug: error.message,
+    });
   }
 });
 
