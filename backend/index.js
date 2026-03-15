@@ -1,8 +1,10 @@
 import bcrypt from "bcrypt";
 import cors from "cors";
+import crypto from "crypto";
 import express from "express";
 import jwt from "jsonwebtoken";
 import { pool } from "./db.js";
+import { sendVerificationEmail } from "./lib/mailer.js";
 import { getOpenAI } from "./lib/openai.js";
 import { authenticateUser } from "./middleware/auth.js";
 import { creditGuard } from "./middleware/creditGuard.js";
@@ -36,63 +38,133 @@ app.get("/hello", (req, res) => {
 
 app.post("/auth/signup", async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { firstName, lastName, phoneNumber, country, email, password } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ message: "Email and password required" });
+    if (
+      !firstName?.trim() ||
+      !lastName?.trim() ||
+      !phoneNumber?.trim() ||
+      !country?.trim() ||
+      !email?.trim() ||
+      !password?.trim()
+    ) {
+      return res.status(400).json({ message: "All fields are required" });
     }
 
-    if (password.length < 6) {
-      return res.status(400).json({ message: "Password too short" });
+    const strongPassword =
+      password.length >= 8 &&
+      /[A-Z]/.test(password) &&
+      /[a-z]/.test(password) &&
+      /[0-9]/.test(password) &&
+      /[^A-Za-z0-9]/.test(password);
+
+    if (!strongPassword) {
+      return res.status(400).json({
+        message:
+          "Password must be at least 8 characters and include uppercase, lowercase, number, and special character",
+      });
     }
+
+    const normalizedEmail = email.trim().toLowerCase();
 
     const existingUser = await pool.query(
-      "SELECT id FROM users WHERE email = $1",
-      [email]
+      "SELECT id, email_verified FROM users WHERE email = $1",
+      [normalizedEmail]
     );
 
     if (existingUser.rows.length > 0) {
-      return res.status(409).json({ message: "User already exists" });
+      return res.status(409).json({
+        message: "User already exists",
+      });
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
 
-    const result = await pool.query(
+    const verificationToken = crypto.randomBytes(32).toString("hex");
+    const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    await pool.query(
       `
-      INSERT INTO users (email, password_hash, plan, credits, extra_credits)
-      VALUES ($1, $2, 'free', 15, 0)
-      RETURNING id, email, plan, credits, extra_credits
+      INSERT INTO users (
+        first_name,
+        last_name,
+        phone_number,
+        country,
+        email,
+        password_hash,
+        plan,
+        credits,
+        extra_credits,
+        email_verified,
+        email_verification_token,
+        email_verification_expires
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, 'free', 15, 0, false, $7, $8)
       `,
-      [email, passwordHash]
+      [
+        firstName.trim(),
+        lastName.trim(),
+        phoneNumber.trim(),
+        country.trim(),
+        normalizedEmail,
+        passwordHash,
+        verificationToken,
+        verificationExpires,
+      ]
     );
 
-    const user = result.rows[0];
-
-    const token = jwt.sign(
-      {
-        id: user.id,
-        plan: user.plan,
-        credits: user.credits,
-        extraCredits: user.extra_credits,
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
-    );
+    await sendVerificationEmail(normalizedEmail, verificationToken);
 
     res.status(201).json({
-      message: "Signup successful",
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        plan: user.plan,
-        credits: user.credits,
-        extraCredits: user.extra_credits,
-      },
+      message:
+        "Account created successfully. Please check your email to verify your account.",
     });
   } catch (err) {
     console.error("Signup error:", err);
     res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+app.get("/auth/verify-email", async (req, res) => {
+  try {
+    const { token } = req.query;
+
+    if (!token) {
+      return res.status(400).send("Invalid verification link");
+    }
+
+    const result = await pool.query(
+      `
+      SELECT id
+      FROM users
+      WHERE email_verification_token = $1
+        AND email_verification_expires > NOW()
+      `,
+      [token]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(400).send("Verification link is invalid or expired");
+    }
+
+    const userId = result.rows[0].id;
+
+    await pool.query(
+      `
+      UPDATE users
+      SET
+        email_verified = true,
+        email_verification_token = NULL,
+        email_verification_expires = NULL
+      WHERE id = $1
+      `,
+      [userId]
+    );
+
+    res.send("Email verified successfully. You can now return to the app and log in.");
+  } catch (err) {
+    console.error("Email verification error:", err);
+    res.status(500).send("Internal server error");
   }
 });
 
