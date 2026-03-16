@@ -178,7 +178,7 @@ app.post("/auth/login", async (req, res) => {
 
     const result = await pool.query(
       `
-      SELECT id, email, password_hash, plan, credits, extra_credits
+      SELECT id, email, password_hash, plan, credits, extra_credits, email_verified
       FROM users
       WHERE email = $1
       `,
@@ -194,6 +194,12 @@ app.post("/auth/login", async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
       return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    if (!user.email_verified) {
+      return res.status(403).json({
+        message: "Please verify your email address before logging in",
+      });
     }
 
     const token = jwt.sign(
