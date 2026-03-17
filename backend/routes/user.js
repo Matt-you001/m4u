@@ -60,7 +60,6 @@ router.get("/me", authenticateUser, async (req, res) => {
         first_name,
         last_name,
         phone_number,
-        country,
         email,
         plan,
         credits,
@@ -84,7 +83,6 @@ router.get("/me", authenticateUser, async (req, res) => {
       firstName: user.first_name || "",
       lastName: user.last_name || "",
       phoneNumber: user.phone_number || "",
-      country: user.country || "",
       email: user.email,
       plan: user.plan,
       credits: user.credits,
@@ -101,16 +99,16 @@ router.get("/me", authenticateUser, async (req, res) => {
 
 /**
  * PATCH /user/profile
- * Body: { firstName, lastName, country }
+ * Body: { firstName, lastName}
  */
 router.patch("/profile", authenticateUser, async (req, res) => {
   try {
     const userId = req.user.id;
-    const { firstName, lastName, country } = req.body;
+    const { firstName, lastName } = req.body;
 
-    if (!firstName?.trim() || !lastName?.trim() || !country?.trim()) {
+    if (!firstName?.trim() || !lastName?.trim()) {
       return res.status(400).json({
-        message: "First name, last name, and country are required",
+        message: "First name and last name are required",
       });
     }
 
@@ -119,21 +117,19 @@ router.patch("/profile", authenticateUser, async (req, res) => {
       UPDATE users
       SET
         first_name = $1,
-        last_name = $2,
-        country = $3
-      WHERE id = $4
+        last_name = $2
+      WHERE id = $3
       RETURNING
         id,
         first_name,
         last_name,
         phone_number,
-        country,
         email,
         plan,
         credits,
         extra_credits
       `,
-      [firstName.trim(), lastName.trim(), country.trim(), userId]
+      [firstName.trim(), lastName.trim(), userId]
     );
 
     const user = rows[0];
@@ -147,7 +143,6 @@ router.patch("/profile", authenticateUser, async (req, res) => {
         firstName: user.first_name || "",
         lastName: user.last_name || "",
         phoneNumber: user.phone_number || "",
-        country: user.country || "",
         email: user.email,
         plan: user.plan,
         credits: user.credits,
