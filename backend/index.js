@@ -37,14 +37,15 @@ app.get("/hello", (req, res) => {
 // ================= AUTH =================
 
 app.post("/auth/signup", async (req, res) => {
+  const client = await pool.connect();
+
   try {
-    const { firstName, lastName, phoneNumber, country, email, password } = req.body;
+    const { firstName, lastName, phoneNumber, email, password } = req.body;
 
     if (
       !firstName?.trim() ||
       !lastName?.trim() ||
       !phoneNumber?.trim() ||
-      !country?.trim() ||
       !email?.trim() ||
       !password?.trim()
     ) {
@@ -66,30 +67,69 @@ app.post("/auth/signup", async (req, res) => {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
+    const passwordHash = await bcrypt.hash(password, 10);
 
-    const existingUser = await pool.query(
+    await client.query("BEGIN");
+
+    const existingUser = await client.query(
       "SELECT id, email_verified FROM users WHERE email = $1",
       [normalizedEmail]
     );
 
     if (existingUser.rows.length > 0) {
+      const existing = existingUser.rows[0];
+
+      if (!existing.email_verified) {
+        const verificationToken = crypto.randomBytes(32).toString("hex");
+        const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+        await client.query(
+          `
+          UPDATE users
+          SET
+            first_name = $1,
+            last_name = $2,
+            phone_number = $3,
+            password_hash = $4,
+            email_verification_token = $5,
+            email_verification_expires = $6
+          WHERE email = $7
+          `,
+          [
+            firstName.trim(),
+            lastName.trim(),
+            phoneNumber.trim(),
+            passwordHash,
+            verificationToken,
+            verificationExpires,
+            normalizedEmail,
+          ]
+        );
+
+        await sendVerificationEmail(normalizedEmail, verificationToken);
+        await client.query("COMMIT");
+
+        return res.status(200).json({
+          message:
+            "This email is already registered but not yet verified. A new verification email has been sent.",
+        });
+      }
+
+      await client.query("ROLLBACK");
       return res.status(409).json({
         message: "User already exists",
       });
     }
 
-    const passwordHash = await bcrypt.hash(password, 10);
-
     const verificationToken = crypto.randomBytes(32).toString("hex");
     const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-    await pool.query(
+    await client.query(
       `
       INSERT INTO users (
         first_name,
         last_name,
         phone_number,
-        country,
         email,
         password_hash,
         plan,
@@ -99,13 +139,12 @@ app.post("/auth/signup", async (req, res) => {
         email_verification_token,
         email_verification_expires
       )
-      VALUES ($1, $2, $3, $4, $5, $6, 'free', 15, 0, false, $7, $8)
+      VALUES ($1, $2, $3, $4, $5, 'free', 15, 0, false, $6, $7)
       `,
       [
         firstName.trim(),
         lastName.trim(),
         phoneNumber.trim(),
-        country.trim(),
         normalizedEmail,
         passwordHash,
         verificationToken,
@@ -115,13 +154,18 @@ app.post("/auth/signup", async (req, res) => {
 
     await sendVerificationEmail(normalizedEmail, verificationToken);
 
+    await client.query("COMMIT");
+
     res.status(201).json({
       message:
         "Account created successfully. Please check your email to verify your account.",
     });
   } catch (err) {
+    await client.query("ROLLBACK");
     console.error("Signup error:", err);
     res.status(500).json({ message: "Internal server error" });
+  } finally {
+    client.release();
   }
 });
 

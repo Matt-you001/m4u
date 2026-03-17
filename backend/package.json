@@ -25,7 +25,8 @@
     "jsonwebtoken": "^9.0.3",
     "nodemailer": "^8.0.2",
     "openai": "^6.16.0",
-    "pg": "^8.17.1"
+    "pg": "^8.17.1",
+    "resend": "^6.9.4"
   },
   "engines": {
     "node": "24"
