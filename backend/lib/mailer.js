@@ -11,7 +11,7 @@ export async function sendVerificationEmail(email, token) {
     throw new Error("APP_BASE_URL is not configured");
   }
 
-  const fromEmail = process.env.EMAIL_FROM || "m4U <onboarding@resend.dev>";
+  const fromEmail = process.env.EMAIL_FROM || "m4U <no-reply@notifications.techsolutionproviders.net>";
   const verifyUrl = `${process.env.APP_BASE_URL}/auth/verify-email?token=${token}`;
 
   const { error } = await resend.emails.send({
