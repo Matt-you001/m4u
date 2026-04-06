@@ -3,6 +3,12 @@ import { pool } from '../db.js';
 
 export const creditGuard = async (req, res, next) => {
   try {
+    // ✅ TEMPORARY TEST MODE: disable credit checks entirely
+    if (process.env.DISABLE_CREDITS === 'true') {
+      req.remainingCredits = 999999;
+      return next();
+    }
+    
     const userId = req.user.id;
 
     // 1️⃣ Get user
