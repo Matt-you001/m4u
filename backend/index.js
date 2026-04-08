@@ -277,32 +277,77 @@ app.post("/auth/login", async (req, res) => {
 
 app.post("/auth/google", async (req, res) => {
   try {
-    const { email } = req.body;
+    const { email, firstName, lastName } = req.body;
 
     if (!email) {
       return res.status(400).json({ message: "Email required" });
     }
 
+    const normalizedEmail = email.trim().toLowerCase();
+
     let result = await pool.query(
-      `SELECT id, email, plan, credits, extra_credits
-       FROM users
-       WHERE email = $1`,
-      [email]
+      `
+      SELECT id, email, first_name, last_name, plan, credits, extra_credits, email_verified
+      FROM users
+      WHERE email = $1
+      `,
+      [normalizedEmail]
     );
 
     let user;
 
     if (result.rows.length === 0) {
       const insert = await pool.query(
-        `INSERT INTO users (email, plan, credits, extra_credits)
-         VALUES ($1, 'free', 15, 0)
-         RETURNING id, email, plan, credits, extra_credits`,
-        [email]
+        `
+        INSERT INTO users (
+          first_name,
+          last_name,
+          email,
+          plan,
+          credits,
+          extra_credits,
+          email_verified
+        )
+        VALUES ($1, $2, $3, 'free', 15, 0, true)
+        RETURNING id, email, first_name, last_name, plan, credits, extra_credits, email_verified
+        `,
+        [
+          firstName?.trim() || "",
+          lastName?.trim() || "",
+          normalizedEmail,
+        ]
       );
 
       user = insert.rows[0];
     } else {
       user = result.rows[0];
+
+      // Optional: update missing names / verify existing Google user
+      const shouldUpdateNames =
+        (!user.first_name && firstName?.trim()) ||
+        (!user.last_name && lastName?.trim()) ||
+        user.email_verified !== true;
+
+      if (shouldUpdateNames) {
+        const updated = await pool.query(
+          `
+          UPDATE users
+          SET
+            first_name = COALESCE(NULLIF(first_name, ''), $1),
+            last_name = COALESCE(NULLIF(last_name, ''), $2),
+            email_verified = true
+          WHERE email = $3
+          RETURNING id, email, first_name, last_name, plan, credits, extra_credits, email_verified
+          `,
+          [
+            firstName?.trim() || "",
+            lastName?.trim() || "",
+            normalizedEmail,
+          ]
+        );
+
+        user = updated.rows[0];
+      }
     }
 
     const token = jwt.sign(
@@ -321,12 +366,13 @@ app.post("/auth/google", async (req, res) => {
       user: {
         id: user.id,
         email: user.email,
+        firstName: user.first_name || "",
+        lastName: user.last_name || "",
         plan: user.plan,
         credits: user.credits,
         extraCredits: user.extra_credits,
       },
     });
-
   } catch (err) {
     console.error("Google auth error:", err);
     res.status(500).json({ message: "Google auth failed" });
