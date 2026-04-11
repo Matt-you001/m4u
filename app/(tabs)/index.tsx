@@ -8,10 +8,8 @@ type Plan = 'free' | 'basic' | 'premium';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { plan, credits, logout, token } = useAuth();
+  const { plan, credits, logout, token, firstName, lastName } = useAuth();
   const isLoggedIn = !!token;
-  /*const { plan, totalCredits } = useAuth();*/
-
 
   return (
     <View style={styles.container}>
@@ -25,15 +23,16 @@ export default function HomeScreen() {
 
         <ProfileMenu
           isLoggedIn={isLoggedIn}
+          firstName={firstName}
+          lastName={lastName}
           plan={plan}
           credits={credits}
           onUpgrade={() => router.push("/upgrade")}
           onSettings={() => router.push("/settings")}
+          onProfile={() => router.push("/profile")}
           onLogin={() => router.push("/login")}
           onLogout={logout}
         />
-
-
       </View>
 
       {/* Hero */}

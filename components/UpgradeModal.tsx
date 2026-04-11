@@ -1,28 +1,73 @@
 import { router } from 'expo-router';
 import { Modal, Pressable, Text, View } from 'react-native';
 
-export default function UpgradeModal({ visible }: { visible: boolean }) {
+export default function UpgradeModal({
+  visible,
+  onClose,
+}: {
+  visible: boolean;
+  onClose: () => void;
+}) {
   return (
-    <Modal transparent visible={visible}>
-      <View style={{
-        flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.6)',
-        justifyContent: 'center',
-        alignItems: 'center'
-      }}>
-        <View style={{ backgroundColor: '#fff', padding: 20, borderRadius: 12 }}>
+    <Modal transparent visible={visible} animationType="fade">
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: 'rgba(0,0,0,0.6)',
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}
+      >
+        <View
+          style={{
+            backgroundColor: '#fff',
+            padding: 20,
+            borderRadius: 12,
+            width: 280,
+            position: 'relative',
+          }}
+        >
+          {/* ❌ CLOSE BUTTON */}
+          <Pressable
+            onPress={onClose}
+            style={{
+              position: 'absolute',
+              top: 8,
+              right: 10,
+              padding: 6,
+              zIndex: 10,
+            }}
+          >
+            <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#6B7280' }}>
+              ✕
+            </Text>
+          </Pressable>
+
+          {/* TITLE */}
           <Text style={{ fontSize: 18, fontWeight: 'bold' }}>
             🚫 Out of Credits
           </Text>
 
-          <Pressable onPress={() => router.push('/upgrade')}>
-            <Text style={{ marginTop: 10, color: '#2563eb' }}>
+          {/* UPGRADE */}
+          <Pressable
+            onPress={() => {
+              onClose();
+              router.push('/upgrade');
+            }}
+          >
+            <Text style={{ marginTop: 14, color: '#2563eb', fontWeight: '600' }}>
               Upgrade Plan
             </Text>
           </Pressable>
 
-          <Pressable onPress={() => router.push('/upgrade')}>
-            <Text style={{ marginTop: 10, color: '#16a34a' }}>
+          {/* WATCH AD */}
+          <Pressable
+            onPress={() => {
+              onClose();
+              router.push('/upgrade'); // replace later with ad logic
+            }}
+          >
+            <Text style={{ marginTop: 10, color: '#16a34a', fontWeight: '600' }}>
               Watch Ad (+1 Credit)
             </Text>
           </Pressable>

@@ -6,9 +6,9 @@ import { getAuthStore } from "../store/authStore";
 const isDev = __DEV__;
 
 const api = axios.create({
-  baseURL: isDev
-  ? "http://192.168.1.127:5000"
-  : "https://api-f5s6ry7piq-uc.a.run.app",
+  baseURL: __DEV__
+    ? "http://192.168.1.127:5000"
+    : "https://m4u-1.onrender.com",
 });
 
 

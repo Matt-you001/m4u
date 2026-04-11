@@ -1,9 +1,30 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Picker } from "@react-native-picker/picker";
+import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, TextInput } from "react-native";
+
+const RESPONSE_LANGUAGE_OPTIONS = [
+  "English",
+  "French",
+  "Spanish",
+  "German",
+  "Portuguese",
+  "Italian",
+  "Dutch",
+  "Arabic",
+  "Chinese",
+  "Japanese",
+  "Korean",
+  "Hindi",
+  "Pidgin",
+];
+
+const TONE_OPTIONS = ["Polite", "Professional", "Funny", "Romantic", "Firm"];
 
 export default function Settings() {
+  const router = useRouter();
+
   const [responseLanguage, setResponseLanguage] = useState("English");
   const [translationLanguage, setTranslationLanguage] = useState("English");
   const [tone, setTone] = useState("Polite");
@@ -17,13 +38,35 @@ export default function Settings() {
   }, []);
 
   const loadSettings = async () => {
-    setResponseLanguage(
-      (await AsyncStorage.getItem("defaultResponseLanguage")) || "English"
-    );
-    setTranslationLanguage(
-      (await AsyncStorage.getItem("defaultTranslationLanguage")) || "English"
-    );
-    setTone((await AsyncStorage.getItem("defaultResponseTone")) || "Polite");
+    const savedResponseLanguage =
+      (await AsyncStorage.getItem("defaultResponseLanguage")) || "English";
+    const savedTranslationLanguage =
+      (await AsyncStorage.getItem("defaultTranslationLanguage")) || "";
+    const savedTone =
+      (await AsyncStorage.getItem("defaultResponseTone")) || "Polite";
+
+    if (RESPONSE_LANGUAGE_OPTIONS.includes(savedResponseLanguage)) {
+      setResponseLanguage(savedResponseLanguage);
+    } else {
+      setResponseLanguage("Other");
+      setCustomResponseLanguage(savedResponseLanguage);
+    }
+
+    if (!savedTranslationLanguage) {
+      setTranslationLanguage("");
+    } else if (RESPONSE_LANGUAGE_OPTIONS.includes(savedTranslationLanguage)) {
+      setTranslationLanguage(savedTranslationLanguage);
+    } else {
+      setTranslationLanguage("Other");
+      setCustomTranslationLanguage(savedTranslationLanguage);
+    }
+
+    if (TONE_OPTIONS.includes(savedTone)) {
+      setTone(savedTone);
+    } else {
+      setTone("Other");
+      setCustomTone(savedTone);
+    }
   };
 
   const save = async (key: string, value: string) => {
@@ -31,7 +74,11 @@ export default function Settings() {
   };
 
   return (
-    <View style={styles.container}>
+    <ScrollView contentContainerStyle={styles.container}>
+      <Pressable onPress={() => router.back()} style={styles.backButton}>
+        <Text style={styles.backText}>← Back</Text>
+      </Pressable>
+
       <Text style={styles.title}>Settings</Text>
 
       {/* RESPONSE LANGUAGE */}
@@ -40,25 +87,24 @@ export default function Settings() {
         selectedValue={responseLanguage}
         onValueChange={(v) => {
           setResponseLanguage(v);
-          save(
-            "defaultResponseLanguage",
-            v === "Other" ? customResponseLanguage : v
-          );
+          if (v !== "Other") {
+            save("defaultResponseLanguage", v);
+          }
         }}
       >
         <Picker.Item label="English (Default)" value="English" />
         <Picker.Item label="French" value="French" />
-          <Picker.Item label="Spanish" value="Spanish" />
-          <Picker.Item label="German" value="German" />
-          <Picker.Item label="Portuguese" value="Portuguese" />
-          <Picker.Item label="Italian" value="Italian" />
-          <Picker.Item label="Dutch" value="Dutch" />
-          <Picker.Item label="Arabic" value="Arabic" />
-          <Picker.Item label="Chinese" value="Chinese" />
-          <Picker.Item label="Japanese" value="Japanese" />
-          <Picker.Item label="Korean" value="Korean" />
-          <Picker.Item label="Hindi" value="Hindi" />
-          <Picker.Item label="Pidgin" value="Pidgin" />
+        <Picker.Item label="Spanish" value="Spanish" />
+        <Picker.Item label="German" value="German" />
+        <Picker.Item label="Portuguese" value="Portuguese" />
+        <Picker.Item label="Italian" value="Italian" />
+        <Picker.Item label="Dutch" value="Dutch" />
+        <Picker.Item label="Arabic" value="Arabic" />
+        <Picker.Item label="Chinese" value="Chinese" />
+        <Picker.Item label="Japanese" value="Japanese" />
+        <Picker.Item label="Korean" value="Korean" />
+        <Picker.Item label="Hindi" value="Hindi" />
+        <Picker.Item label="Pidgin" value="Pidgin" />
         <Picker.Item label="Other" value="Other" />
       </Picker>
 
@@ -66,7 +112,10 @@ export default function Settings() {
         <TextInput
           placeholder="Custom response language"
           value={customResponseLanguage}
-          onChangeText={setCustomResponseLanguage}
+          onChangeText={(text) => {
+            setCustomResponseLanguage(text);
+            save("defaultResponseLanguage", text.trim());
+          }}
           style={styles.input}
         />
       )}
@@ -77,25 +126,25 @@ export default function Settings() {
         selectedValue={translationLanguage}
         onValueChange={(v) => {
           setTranslationLanguage(v);
-          save(
-            "defaultTranslationLanguage",
-            v === "Other" ? customTranslationLanguage : v
-          );
+          if (v !== "Other") {
+            save("defaultTranslationLanguage", v);
+          }
         }}
       >
-        <Picker.Item label="English (Default)" value="English" />
+        <Picker.Item label="Select language" value="" />
+        <Picker.Item label="English" value="English" />
         <Picker.Item label="French" value="French" />
-          <Picker.Item label="Spanish" value="Spanish" />
-          <Picker.Item label="German" value="German" />
-          <Picker.Item label="Portuguese" value="Portuguese" />
-          <Picker.Item label="Italian" value="Italian" />
-          <Picker.Item label="Dutch" value="Dutch" />
-          <Picker.Item label="Arabic" value="Arabic" />
-          <Picker.Item label="Chinese" value="Chinese" />
-          <Picker.Item label="Japanese" value="Japanese" />
-          <Picker.Item label="Korean" value="Korean" />
-          <Picker.Item label="Hindi" value="Hindi" />
-          <Picker.Item label="Pidgin" value="Pidgin" />
+        <Picker.Item label="Spanish" value="Spanish" />
+        <Picker.Item label="German" value="German" />
+        <Picker.Item label="Portuguese" value="Portuguese" />
+        <Picker.Item label="Italian" value="Italian" />
+        <Picker.Item label="Dutch" value="Dutch" />
+        <Picker.Item label="Arabic" value="Arabic" />
+        <Picker.Item label="Chinese" value="Chinese" />
+        <Picker.Item label="Japanese" value="Japanese" />
+        <Picker.Item label="Korean" value="Korean" />
+        <Picker.Item label="Hindi" value="Hindi" />
+        <Picker.Item label="Pidgin" value="Pidgin" />
         <Picker.Item label="Other" value="Other" />
       </Picker>
 
@@ -103,7 +152,10 @@ export default function Settings() {
         <TextInput
           placeholder="Custom translation language"
           value={customTranslationLanguage}
-          onChangeText={setCustomTranslationLanguage}
+          onChangeText={(text) => {
+            setCustomTranslationLanguage(text);
+            save("defaultTranslationLanguage", text.trim());
+          }}
           style={styles.input}
         />
       )}
@@ -114,7 +166,9 @@ export default function Settings() {
         selectedValue={tone}
         onValueChange={(v) => {
           setTone(v);
-          save("defaultResponseTone", v === "Other" ? customTone : v);
+          if (v !== "Other") {
+            save("defaultResponseTone", v);
+          }
         }}
       >
         <Picker.Item label="Polite (Default)" value="Polite" />
@@ -129,23 +183,45 @@ export default function Settings() {
         <TextInput
           placeholder="Custom tone"
           value={customTone}
-          onChangeText={setCustomTone}
+          onChangeText={(text) => {
+            setCustomTone(text);
+            save("defaultResponseTone", text.trim());
+          }}
           style={styles.input}
         />
       )}
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 16 },
-  title: { fontSize: 22, fontWeight: "bold", marginBottom: 20 },
-  label: { marginTop: 16, marginBottom: 6 },
-  input: {
-    backgroundColor: "#fff",
+  container: { padding: 20, flex: 1, backgroundColor: "#F9FAFB" },
+  backButton: {
+    marginBottom: 10,
+  },
+  backText: {
+    fontSize: 16,
+    color: "#4F46E5",
+    fontWeight: "600",
+     padding: 5,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    color: "#4F46E5",
+    marginTop: 30,
+    marginBottom: 25,
+  },
+  pickerBox: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#ddd",
-    padding: 10,
-    borderRadius: 8,
+    borderColor: '#E5E7EB',
+    marginBottom: 14,
+  },
+  input: {
+    backgroundColor: '#FFFFFF',
+    marginBottom: 14,
   },
 });

@@ -1,8 +1,11 @@
+import { Ionicons } from "@expo/vector-icons";
 import { Link } from "expo-router";
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -10,221 +13,214 @@ import {
 } from "react-native";
 import { useAuth } from "../context/AuthContext";
 import api from "../utils/api";
-import { useGoogleAuth } from "../utils/googleAuth";
-
-
+import { signInWithGoogle } from "../utils/googleAuth";
 
 export default function Signup() {
   const { login } = useAuth();
-  const { request, response, promptAsync } = useGoogleAuth();
 
+  const [showForm, setShowForm] = useState(false);
 
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [countryCode, setCountryCode] = useState("+234");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
-  useEffect(() => {
-    if (response?.type === "success") {
-      const { accessToken } = response.authentication!;
+  const passwordChecks = useMemo(() => {
+    return {
+      length: password.length >= 8,
+      uppercase: /[A-Z]/.test(password),
+      lowercase: /[a-z]/.test(password),
+      number: /[0-9]/.test(password),
+      special: /[^A-Za-z0-9]/.test(password),
+    };
+  }, [password]);
 
-      (async () => {
-        try {
-          const res = await fetch(
-            "https://www.googleapis.com/oauth2/v3/userinfo",
-            {
-              headers: {
-                Authorization: `Bearer ${accessToken}`,
-              },
-            }
-          );
+  const isStrongPassword =
+    passwordChecks.length &&
+    passwordChecks.uppercase &&
+    passwordChecks.lowercase &&
+    passwordChecks.number &&
+    passwordChecks.special;
 
-          const profile = await res.json();
-
-          const backendRes = await api.post("/auth/google", {
-            email: profile.email,
-          });
-
-          await login(backendRes.data.token);
-        } catch (err) {
-          console.log("❌ Google sign-in failed", err);
-        }
-      })();
+  const validateForm = () => {
+    if (
+      !firstName.trim() ||
+      !lastName.trim() ||
+      !countryCode.trim() ||
+      !phoneNumber.trim() ||
+      !email.trim() ||
+      !password.trim()
+    ) {
+      return "All fields are required";
     }
-  }, [response]);
 
+    if (!/\S+@\S+\.\S+/.test(email.trim())) {
+      return "Please enter a valid email address";
+    }
+
+    if (!isStrongPassword) {
+      return "Please create a stronger password";
+    }
+
+    return "";
+  };
 
   const handleSignup = async () => {
-    if (!email || !password) {
-      setError("Email and password are required");
+    const validationError = validateForm();
+
+    if (validationError) {
+      setError(validationError);
       return;
     }
 
     try {
       setLoading(true);
       setError("");
+      setSuccessMessage("");
 
       const res = await api.post("/auth/signup", {
-        email,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        phoneNumber: `${countryCode.trim()}${phoneNumber.trim()}`,
+        email: email.trim().toLowerCase(),
         password,
       });
 
-      // 🔐 Permanently sign user in
-      await login(res.data.token);
+      setSuccessMessage(res?.data?.message || "Check your email to verify.");
+
+      setFirstName("");
+      setLastName("");
+      setCountryCode("+234");
+      setPhoneNumber("");
+      setEmail("");
+      setPassword("");
+      setShowPassword(false);
     } catch (err: any) {
-      setError(
-        err?.response?.data?.message || "Signup failed. Try again."
-      );
+      setError(err?.response?.data?.message || "Signup failed.");
     } finally {
       setLoading(false);
     }
   };
 
+  // ✅ GOOGLE SIGN IN (NEW)
+  const handleGoogleSignup = async () => {
+    try {
+      setGoogleLoading(true);
+      setError("");
+
+      const userInfo = await signInWithGoogle();
+      const profile = userInfo?.user;
+
+      if (!profile?.email) {
+        setError("Google sign-in failed.");
+        return;
+      }
+
+      const backendRes = await api.post("/auth/google", {
+        email: profile.email,
+        firstName: profile.givenName || "",
+        lastName: profile.familyName || "",
+      });
+
+      await login(backendRes.data.token);
+    } catch (err) {
+      setError("Google sign-in failed. Try again.");
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  if (!showForm) {
+    return (
+      <KeyboardAvoidingView style={styles.wrapper}>
+        <View style={styles.card}>
+          <Text style={styles.title}>Welcome to m4U</Text>
+
+          <Pressable
+            style={styles.primaryButton}
+            onPress={() => setShowForm(true)}
+          >
+            <Text style={styles.primaryText}>Go to Sign Up</Text>
+          </Pressable>
+
+          <Link href="/login">
+            <Text style={styles.loginText}>Log in</Text>
+          </Link>
+        </View>
+      </KeyboardAvoidingView>
+    );
+  }
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Create your account</Text>
+    <KeyboardAvoidingView style={styles.wrapper}>
+      <View style={styles.card}>
+        <ScrollView>
 
-      <TextInput
-        placeholder="Email address"
-        autoCapitalize="none"
-        keyboardType="email-address"
-        style={styles.input}
-        value={email}
-        onChangeText={setEmail}
-      />
+          <TextInput placeholder="First Name" style={styles.input} value={firstName} onChangeText={setFirstName} />
+          <TextInput placeholder="Last Name" style={styles.input} value={lastName} onChangeText={setLastName} />
 
-      <TextInput
-        placeholder="Password"
-        secureTextEntry
-        style={styles.input}
-        value={password}
-        onChangeText={setPassword}
-      />
+          <View style={styles.phoneRow}>
+            <TextInput style={[styles.input, styles.codeInput]} value={countryCode} onChangeText={setCountryCode} />
+            <TextInput style={[styles.input, styles.phoneInput]} value={phoneNumber} onChangeText={setPhoneNumber} />
+          </View>
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+          <TextInput placeholder="Email" style={styles.input} value={email} onChangeText={setEmail} />
 
-      <Pressable style={styles.primaryButton} onPress={handleSignup}>
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.primaryText}>Create Account</Text>
-        )}
-      </Pressable>
+          <View style={styles.passwordWrapper}>
+            <TextInput
+              placeholder="Password"
+              secureTextEntry={!showPassword}
+              style={[styles.input, styles.passwordInput]}
+              value={password}
+              onChangeText={setPassword}
+            />
+            <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
+              <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={22} />
+            </Pressable>
+          </View>
 
-       {/* Divider */}
-      <Text style={styles.orText}>Already have an account?</Text>
+          {!!error && <Text style={styles.error}>{error}</Text>}
 
-      <Link href="/login">
-        <Text style={styles.loginText}>Log in</Text>
-      </Link>
+          <Pressable style={styles.primaryButton} onPress={handleSignup}>
+            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Create Account</Text>}
+          </Pressable>
 
+          {/* GOOGLE BUTTON */}
+          <Pressable style={styles.googleButton} onPress={handleGoogleSignup}>
+            {googleLoading ? (
+              <ActivityIndicator />
+            ) : (
+              <Text>Continue with Google</Text>
+            )}
+          </Pressable>
 
-      <View style={styles.divider}>
-        <View style={styles.line} />
-        <Text style={styles.or}>OR</Text>
-        <View style={styles.line} />
+        </ScrollView>
       </View>
-
-      {/* Google */}
-      <Pressable
-        style={styles.socialButton}
-        disabled={!request}
-        onPress={() => promptAsync()}
-      >
-        <Text style={styles.socialText}>Continue with Google</Text>
-      </Pressable>
-
-
-
-      {/* Apple */}
-      <Pressable style={styles.socialButton}>
-        <Text style={styles.socialText}>Continue with Apple</Text>
-      </Pressable>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 24,
-    justifyContent: "center",
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: "bold",
-    marginBottom: 6,
-    textAlign: "center",
-    color: "#4F46E5",
-  },
-  subtitle: {
-    fontSize: 14,
-    color: "#666",
-    marginBottom: 24,
-    textAlign: "center",
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 10,
-    padding: 14,
-    marginBottom: 14,
-    backgroundColor: "#fff",
-  },
-  primaryButton: {
-    backgroundColor: "#4F46E5",
-    padding: 16,
-    borderRadius: 12,
-    alignItems: "center",
-    marginTop: 6,
-  },
-  primaryText: {
-    color: "#fff",
-    fontWeight: "600",
-    fontSize: 16,
-  },
-  divider: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: 24,
-  },
-  line: {
-    flex: 1,
-    height: 1,
-    backgroundColor: "#ddd",
-  },
-  or: {
-    marginHorizontal: 12,
-    color: "#666",
-    fontSize: 12,
-  },
-  socialButton: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    padding: 14,
-    borderRadius: 12,
-    alignItems: "center",
-    marginBottom: 12,
-    backgroundColor: "#fff",
-  },
-  socialText: {
-    fontSize: 15,
-    fontWeight: "500",
-  },
-  error: {
-    color: "red",
-    marginBottom: 10,
-    textAlign: "center",
-  },
-   orText: {
-    marginTop: 24,
-    textAlign: "center",
-    color: "#666",
-  },
-  loginText: {
-    marginTop: 6,
-    textAlign: "center",
-    fontSize: 16,
-    fontWeight: "600",
-  },
+  wrapper: { flex: 1, justifyContent: "center", padding: 16 },
+  card: { backgroundColor: "#fff", padding: 20, borderRadius: 12 },
+  input: { borderWidth: 1, padding: 12, marginBottom: 10, borderRadius: 8 },
+  phoneRow: { flexDirection: "row", gap: 10 },
+  codeInput: { flex: 1 },
+  phoneInput: { flex: 2 },
+  primaryButton: { backgroundColor: "#4F46E5", padding: 14, borderRadius: 10 },
+  primaryText: { color: "#fff", textAlign: "center" },
+  googleButton: { marginTop: 10, padding: 14, borderWidth: 1, borderRadius: 10, alignItems: "center" },
+  error: { color: "red", marginBottom: 10 },
+  passwordWrapper: { position: "relative" },
+  passwordInput: { paddingRight: 40 },
+  eyeButton: { position: "absolute", right: 10, top: 14 },
+  loginText: { marginTop: 10, textAlign: "center" },
 });

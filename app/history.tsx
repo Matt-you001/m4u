@@ -5,6 +5,8 @@ import { Appbar, Card } from "react-native-paper";
 import { useAuth } from "../context/AuthContext";
 import { getHistory } from "../utils/history";
 
+const TEST_UNLOCK_HISTORY = true; // <-- change to false when testing is done
+
 export default function HistoryScreen() {
   const [items, setItems] = useState<any[]>([]);
   const router = useRouter();
@@ -13,7 +15,7 @@ export default function HistoryScreen() {
 
   const loadHistory = async () => {
     const data = await getHistory();
-    setItems(data.reverse());
+    setItems([...data].reverse());
   };
 
   useFocusEffect(
@@ -23,6 +25,7 @@ export default function HistoryScreen() {
   );
 
   const isFree = plan === "free";
+  const canAccessHistory = TEST_UNLOCK_HISTORY || !isFree;
 
   return (
     <View style={{ flex: 1 }}>
@@ -30,7 +33,7 @@ export default function HistoryScreen() {
         <Appbar.Content title="History" />
       </Appbar.Header>
 
-      {isFree ? (
+      {!canAccessHistory ? (
         <View style={styles.center}>
           <Text style={styles.lockText}>
             History is unavailable for Free subscribers.
@@ -81,8 +84,8 @@ const styles = StyleSheet.create({
   },
   Appbar: {
     fontSize: 24,
-    fontWeight: 'bold',
-    textAlign: 'center',
+    fontWeight: "bold",
+    textAlign: "center",
     color: "#4F46E5",
     marginTop: 30,
     marginBottom: 25,
@@ -116,8 +119,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 20,
   },
-
-  /* NEW */
   upgradeBtn: {
     backgroundColor: "#4F46E5",
     paddingVertical: 12,

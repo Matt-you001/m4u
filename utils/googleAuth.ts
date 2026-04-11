@@ -1,19 +1,18 @@
-import * as Google from "expo-auth-session/providers/google";
-import * as WebBrowser from "expo-web-browser";
+import { GoogleSignin } from "@react-native-google-signin/google-signin";
 
-WebBrowser.maybeCompleteAuthSession();
+GoogleSignin.configure({
+  webClientId: "323152840697-4r25a9k4fd0occ021iarr5s22o3qms9t.apps.googleusercontent.com",
+});
 
-export function useGoogleAuth() {
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    clientId:
-      "136204403181-mvra2qhlpbttc77h7uqip8eb9c9frr6q.apps.googleusercontent.com",
+export async function signInWithGoogle() {
+  try {
+    await GoogleSignin.hasPlayServices();
 
-    androidClientId:
-      "136204403181-9jakgssh8r0qgavcrjug79oslaf9kud2.apps.googleusercontent.com",
+    const userInfo = await GoogleSignin.signIn();
 
-    iosClientId:
-      "YOUR_IOS_CLIENT_ID.apps.googleusercontent.com",
-  });
-
-  return { request, response, promptAsync };
+    return userInfo;
+  } catch (error: any) {
+    console.log("Google Sign-In Error:", error);
+    throw error;
+  }
 }

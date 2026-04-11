@@ -19,6 +19,8 @@ type AuthContextType = {
   loading: boolean;
   plan: Plan;
   credits: number;
+  firstName: string;
+  lastName: string;
   login: (token: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<any>;
@@ -31,35 +33,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [plan, setPlan] = useState<Plan>("free");
   const [credits, setCredits] = useState(0);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
 
   const router = useRouter();
   const segments = useSegments();
 
-  /**
-   * ✅ STABLE refreshUser
-   */
   const refreshUser = useCallback(async () => {
     try {
       const res = await api.get("/user/me");
 
       setPlan(res.data.plan || "free");
       setCredits(res.data.credits || 0);
+      setFirstName(res.data.firstName || "");
+      setLastName(res.data.lastName || "");
 
-      console.log("✅ user refreshed:", res.data.plan, res.data.credits);
+      console.log(
+        "✅ user refreshed:",
+        res.data.plan,
+        res.data.credits,
+        res.data.firstName,
+        res.data.lastName
+      );
 
-      return res.data; // contains id
+      return res.data;
     } catch (err) {
       console.log("❌ failed to refresh user", err);
       return null;
     }
   }, []);
 
-  /**
-   * 🔄 BOOTSTRAP APP
-   */
   useEffect(() => {
     const bootstrap = async () => {
-      // ✅ configure RevenueCat once
       await configurePurchases();
 
       const storedToken = await AsyncStorage.getItem("token");
@@ -70,7 +75,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const user = await refreshUser();
 
-        // ✅ now we have user
         if (user?.id) {
           await initPurchases(String(user.id));
         }
@@ -82,9 +86,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     bootstrap();
   }, [refreshUser]);
 
-  /**
-   * 🚪 ROUTE GUARD
-   */
   useEffect(() => {
     if (loading) return;
 
@@ -93,11 +94,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (!token && !inAuthRoute) router.replace("/signup");
     if (token && inAuthRoute) router.replace("/(tabs)");
-  }, [token, segments, loading]);
+  }, [token, segments, loading, router]);
 
-  /**
-   * 🔐 LOGIN
-   */
   const login = async (newToken: string) => {
     await AsyncStorage.setItem("token", newToken);
     api.defaults.headers.common.Authorization = `Bearer ${newToken}`;
@@ -112,9 +110,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     router.replace("/(tabs)");
   };
 
-  /**
-   * 🚪 LOGOUT
-   */
   const logout = async () => {
     await AsyncStorage.removeItem("token");
     delete api.defaults.headers.common.Authorization;
@@ -122,6 +117,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
     setPlan("free");
     setCredits(0);
+    setFirstName("");
+    setLastName("");
 
     router.replace("/signup");
   };
@@ -136,7 +133,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ token, loading, login, logout, refreshUser, plan, credits }}
+      value={{
+        token,
+        loading,
+        login,
+        logout,
+        refreshUser,
+        plan,
+        credits,
+        firstName,
+        lastName,
+      }}
     >
       {children}
     </AuthContext.Provider>
