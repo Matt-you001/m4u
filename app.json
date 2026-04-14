@@ -40,13 +40,6 @@
           }
         }
       ],
-      [
-        "expo-speech-recognition",
-        {
-          "microphonePermission": "Allow Message4u to use your microphone for voice prompts.",
-          "speechRecognitionPermission": "Allow Message4u to turn your voice prompt into text."
-        }
-      ],
       "expo-web-browser"
     ],
     "experiments": {

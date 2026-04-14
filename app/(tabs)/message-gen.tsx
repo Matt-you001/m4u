@@ -1,15 +1,9 @@
 import UpgradeModal from '@/components/UpgradeModal';
 import { useAuth } from '@/context/AuthContext';
 import api from '@/utils/api';
-import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
+import { useMemo, useState } from 'react';
 import {
-  ExpoSpeechRecognitionModule,
-  useSpeechRecognitionEvent,
-} from 'expo-speech-recognition';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
@@ -21,21 +15,6 @@ import MessageActions from '../../components/MessageActions';
 import { saveToHistory } from '../../utils/history';
 
 const TEST_MODE = true;
-const SPEECH_LANGUAGE_MAP: Record<string, string> = {
-  English: 'en-US',
-  French: 'fr-FR',
-  Spanish: 'es-ES',
-  German: 'de-DE',
-  Portuguese: 'pt-PT',
-  Italian: 'it-IT',
-  Dutch: 'nl-NL',
-  Arabic: 'ar-SA',
-  Chinese: 'zh-CN',
-  Japanese: 'ja-JP',
-  Korean: 'ko-KR',
-  Hindi: 'hi-IN',
-  Pidgin: 'en-NG',
-};
 
 export default function GenerateScreen() {
   const { plan, refreshUser } = useAuth();
@@ -54,11 +33,6 @@ export default function GenerateScreen() {
   const [result, setResult] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [isListening, setIsListening] = useState(false);
-  const [voicePromptSupported, setVoicePromptSupported] = useState(true);
-  const [voiceStatus, setVoiceStatus] = useState('');
-  const [isCheckingVoiceSupport, setIsCheckingVoiceSupport] = useState(true);
-  const voiceContextBaseRef = useRef('');
 
   const finalTone = useMemo(() => {
     if (tone === 'Other') {
@@ -87,123 +61,6 @@ export default function GenerateScreen() {
     }
     return language.trim() || 'English';
   }, [language, customLanguage]);
-
-  const speechRecognitionLocale = useMemo(() => {
-    return SPEECH_LANGUAGE_MAP[finalLanguage] || 'en-US';
-  }, [finalLanguage]);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const checkVoicePromptAvailability = async () => {
-      try {
-        const available = await ExpoSpeechRecognitionModule.isRecognitionAvailable();
-        if (isMounted) {
-          setVoicePromptSupported(available);
-        }
-      } catch {
-        if (isMounted) {
-          setVoicePromptSupported(false);
-        }
-      } finally {
-        if (isMounted) {
-          setIsCheckingVoiceSupport(false);
-        }
-      }
-    };
-
-    checkVoicePromptAvailability();
-
-    return () => {
-      isMounted = false;
-      ExpoSpeechRecognitionModule.stop();
-      ExpoSpeechRecognitionModule.abort();
-    };
-  }, []);
-
-  useSpeechRecognitionEvent('start', () => {
-    setIsListening(true);
-    setVoiceStatus('Listening... describe what the message should contain.');
-    setError('');
-  });
-
-  useSpeechRecognitionEvent('end', () => {
-    setIsListening(false);
-    setVoiceStatus('Voice prompt added to the context field.');
-  });
-
-  useSpeechRecognitionEvent('result', (event) => {
-    const transcript = event.results[0]?.transcript?.trim();
-
-    if (!transcript) {
-      return;
-    }
-
-    const baseContext = voiceContextBaseRef.current.trim();
-    const nextContext = baseContext ? `${baseContext}\n${transcript}` : transcript;
-    setContext(nextContext);
-    setVoiceStatus(
-      event.isFinal
-        ? 'Voice prompt added to the context field.'
-        : 'Listening... describe what the message should contain.'
-    );
-  });
-
-  useSpeechRecognitionEvent('error', (event) => {
-    setIsListening(false);
-    setVoiceStatus('');
-    setError(
-      event.error === 'not-allowed'
-        ? 'Microphone and speech recognition permission is required for voice prompts.'
-        : event.message || 'Voice prompt could not be completed.'
-    );
-  });
-
-  const startVoicePrompt = async () => {
-    if (loading || isListening) return;
-
-    setError('');
-    setVoiceStatus('Starting microphone...');
-
-    try {
-      const available = await ExpoSpeechRecognitionModule.isRecognitionAvailable();
-      if (!available) {
-        setVoicePromptSupported(false);
-        setVoiceStatus('');
-        setError('Voice prompt is not available on this device.');
-        return;
-      }
-
-      const permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-      if (!permission.granted) {
-        setVoiceStatus('');
-        setError(
-          'Microphone and speech recognition permission is required for voice prompts.'
-        );
-        return;
-      }
-
-      voiceContextBaseRef.current = context.trim();
-      ExpoSpeechRecognitionModule.start({
-        lang: speechRecognitionLocale,
-        interimResults: true,
-        addsPunctuation: true,
-        maxAlternatives: 1,
-        continuous: false,
-      });
-    } catch {
-      setIsListening(false);
-      setVoiceStatus('');
-      setError('Unable to start voice prompt right now.');
-    }
-  };
-
-  const stopVoicePrompt = () => {
-    if (!isListening) return;
-
-    setVoiceStatus('Finishing voice prompt...');
-    ExpoSpeechRecognitionModule.stop();
-  };
 
   const generateMessage = async () => {
     if (loading) return;
@@ -385,52 +242,6 @@ export default function GenerateScreen() {
           onChangeText={setContext}
         />
 
-        <View style={styles.voiceCard}>
-          <View style={styles.voiceHeader}>
-            <View style={styles.voiceCopy}>
-              <Text style={styles.voiceTitle}>Voice Prompt</Text>
-              <Text style={styles.voiceHint}>
-                Speak your ideas and we will place the transcript in the context
-                field above.
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              style={[
-                styles.voiceButton,
-                isListening && styles.voiceButtonActive,
-                (!voicePromptSupported || loading || isCheckingVoiceSupport) &&
-                  styles.voiceButtonDisabled,
-              ]}
-              onPress={isListening ? stopVoicePrompt : startVoicePrompt}
-              disabled={!voicePromptSupported || loading || isCheckingVoiceSupport}
-            >
-              {isCheckingVoiceSupport ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <>
-                  <Ionicons
-                    name={isListening ? 'stop-circle' : 'mic'}
-                    size={18}
-                    color="#fff"
-                  />
-                  <Text style={styles.voiceButtonText}>
-                    {isListening ? 'Stop' : 'Use Voice'}
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-
-          {!voicePromptSupported && !isCheckingVoiceSupport && (
-            <Text style={styles.voiceUnavailable}>
-              Voice prompt is not available on this device yet.
-            </Text>
-          )}
-
-          {!!voiceStatus && <Text style={styles.voiceStatus}>{voiceStatus}</Text>}
-        </View>
-
         <Text style={styles.label}>Language</Text>
         <View style={styles.pickerBox}>
           <Picker selectedValue={language} onValueChange={setLanguage}>
@@ -513,64 +324,6 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     borderWidth: 1,
     borderColor: '#E5E7EB',
-  },
-  voiceCard: {
-    backgroundColor: '#EEF2FF',
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: '#C7D2FE',
-  },
-  voiceHeader: {
-    flexDirection: 'row',
-    gap: 12,
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  voiceCopy: {
-    flex: 1,
-  },
-  voiceTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#312E81',
-    marginBottom: 4,
-  },
-  voiceHint: {
-    color: '#4338CA',
-    lineHeight: 20,
-  },
-  voiceButton: {
-    minWidth: 118,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#4F46E5',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  voiceButtonActive: {
-    backgroundColor: '#DC2626',
-  },
-  voiceButtonDisabled: {
-    opacity: 0.6,
-  },
-  voiceButtonText: {
-    color: '#fff',
-    fontWeight: '700',
-  },
-  voiceStatus: {
-    marginTop: 10,
-    color: '#3730A3',
-    fontWeight: '500',
-  },
-  voiceUnavailable: {
-    marginTop: 10,
-    color: '#991B1B',
-    fontWeight: '500',
   },
   primaryButton: {
     backgroundColor: '#4F46E5',
