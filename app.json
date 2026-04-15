@@ -13,7 +13,6 @@
       "buildNumber": "1"
     },
     "android": {
-      "jsEngine": "jsc",
       "package": "com.mattonah.message4u",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
