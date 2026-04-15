@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1051139924143",
+    "project_id": "message4u-2f872",
+    "storage_bucket": "message4u-2f872.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1051139924143:android:32b9adb6fe9892c249b45a",
+        "android_client_info": {
+          "package_name": "com.mattonah.message4u"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCE0BjrKRJoueu78agxRGrvs4rEzGb-Jao"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

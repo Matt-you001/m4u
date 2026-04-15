@@ -13,6 +13,7 @@
       "buildNumber": "1"
     },
     "android": {
+      "googleServicesFile": "./google-services.json",
       "package": "com.mattonah.message4u",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -28,6 +29,14 @@
     },
     "plugins": [
       "expo-router",
+      "@react-native-google-signin/google-signin",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow Message4u to use your microphone for voice prompts.",
+          "speechRecognitionPermission": "Allow Message4u to turn your voice prompt into text."
+        }
+      ],
       [
         "expo-splash-screen",
         {

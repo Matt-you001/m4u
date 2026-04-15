@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Link } from "expo-router";
+import { Link, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,10 +14,14 @@ import {
 } from "react-native";
 import { useAuth } from "../context/AuthContext";
 import api from "../utils/api";
-import { signInWithGoogle } from "../utils/googleAuth";
+import {
+  getGoogleSignInErrorMessage,
+  signInWithGoogle,
+} from "../utils/googleAuth";
 
 export default function Signup() {
   const { login } = useAuth();
+  const router = useRouter();
 
   const [showForm, setShowForm] = useState(false);
 
@@ -132,7 +137,7 @@ export default function Signup() {
 
       await login(backendRes.data.token);
     } catch (err) {
-      setError("Google sign-in failed. Try again.");
+      setError(getGoogleSignInErrorMessage(err));
     } finally {
       setGoogleLoading(false);
     }
@@ -160,9 +165,25 @@ export default function Signup() {
   }
 
   return (
-    <KeyboardAvoidingView style={styles.wrapper}>
+    <KeyboardAvoidingView
+      style={styles.wrapper}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
       <View style={styles.card}>
         <ScrollView>
+          <View style={styles.formHeader}>
+            <Pressable
+              style={styles.backButton}
+              onPress={() => setShowForm(false)}
+            >
+              <Ionicons name="arrow-back" size={20} color="#111827" />
+              <Text style={styles.backText}>Back</Text>
+            </Pressable>
+
+            <Pressable onPress={() => router.replace("/login")}>
+              <Text style={styles.inlineLoginText}>Already have an account? Login</Text>
+            </Pressable>
+          </View>
 
           <TextInput placeholder="First Name" style={styles.input} value={firstName} onChangeText={setFirstName} />
           <TextInput placeholder="Last Name" style={styles.input} value={lastName} onChangeText={setLastName} />
@@ -194,12 +215,16 @@ export default function Signup() {
           </Pressable>
 
           {/* GOOGLE BUTTON */}
-          <Pressable style={styles.googleButton} onPress={handleGoogleSignup}>
+          {/*<Pressable style={styles.googleButton} onPress={handleGoogleSignup}>
             {googleLoading ? (
               <ActivityIndicator />
             ) : (
               <Text>Continue with Google</Text>
             )}
+          </Pressable>*/}
+
+          <Pressable style={styles.secondaryLinkButton} onPress={() => router.replace("/login")}>
+            <Text style={styles.secondaryLinkText}>Already have an account? Login</Text>
           </Pressable>
 
         </ScrollView>
@@ -211,6 +236,28 @@ export default function Signup() {
 const styles = StyleSheet.create({
   wrapper: { flex: 1, justifyContent: "center", padding: 16 },
   card: { backgroundColor: "#fff", padding: 20, borderRadius: 12 },
+  formHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+    gap: 12,
+  },
+  backButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 6,
+  },
+  backText: {
+    color: "#111827",
+    fontWeight: "600",
+  },
+  inlineLoginText: {
+    color: "#4F46E5",
+    fontWeight: "600",
+    textAlign: "right",
+  },
   input: { borderWidth: 1, padding: 12, marginBottom: 10, borderRadius: 8 },
   phoneRow: { flexDirection: "row", gap: 10 },
   codeInput: { flex: 1 },
@@ -218,6 +265,15 @@ const styles = StyleSheet.create({
   primaryButton: { backgroundColor: "#4F46E5", padding: 14, borderRadius: 10 },
   primaryText: { color: "#fff", textAlign: "center" },
   googleButton: { marginTop: 10, padding: 14, borderWidth: 1, borderRadius: 10, alignItems: "center" },
+  secondaryLinkButton: {
+    marginTop: 12,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  secondaryLinkText: {
+    color: "#4F46E5",
+    fontWeight: "600",
+  },
   error: { color: "red", marginBottom: 10 },
   passwordWrapper: { position: "relative" },
   passwordInput: { paddingRight: 40 },
