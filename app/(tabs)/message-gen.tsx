@@ -208,6 +208,11 @@ export default function GenerateScreen() {
   const generateMessage = async () => {
     if (loading) return;
 
+    if (!finalTone) {
+      setError('Please select a tone');
+      return;
+    }
+
     if (!finalCategory) {
       setError('Please select a category');
       return;
