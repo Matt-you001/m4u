@@ -3,8 +3,11 @@ import cors from "cors";
 import crypto from "crypto";
 import express from "express";
 import jwt from "jsonwebtoken";
-import { pool } from "./db.js";
-import { sendVerificationEmail } from "./lib/mailer.js";
+import { ensureAuthSchema, pool } from "./db.js";
+import {
+  sendPasswordResetCodeEmail,
+  sendVerificationCodeEmail,
+} from "./lib/mailer.js";
 import { getOpenAI } from "./lib/openai.js";
 import { authenticateUser } from "./middleware/auth.js";
 import { creditGuard } from "./middleware/creditGuard.js";
@@ -36,6 +39,41 @@ app.get("/hello", (req, res) => {
 
 // ================= AUTH =================
 
+const OTP_TTL_MINUTES = 10;
+const OTP_RESEND_COOLDOWN_SECONDS = 60;
+const OTP_MAX_ATTEMPTS = 5;
+
+function isStrongPassword(password) {
+  return (
+    password.length >= 8 &&
+    /[A-Z]/.test(password) &&
+    /[a-z]/.test(password) &&
+    /[0-9]/.test(password) &&
+    /[^A-Za-z0-9]/.test(password)
+  );
+}
+
+function generateOtpCode() {
+  return `${crypto.randomInt(100000, 1000000)}`;
+}
+
+function hashOtpCode(code) {
+  return crypto.createHash("sha256").update(code).digest("hex");
+}
+
+function getOtpExpiryDate() {
+  return new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000);
+}
+
+function getSecondsUntilResend(lastSentAt) {
+  if (!lastSentAt) return 0;
+
+  const elapsedMs = Date.now() - new Date(lastSentAt).getTime();
+  const remainingMs = OTP_RESEND_COOLDOWN_SECONDS * 1000 - elapsedMs;
+
+  return remainingMs > 0 ? Math.ceil(remainingMs / 1000) : 0;
+}
+
 app.post("/auth/signup", async (req, res) => {
   const client = await pool.connect();
 
@@ -52,14 +90,7 @@ app.post("/auth/signup", async (req, res) => {
       return res.status(400).json({ message: "All fields are required" });
     }
 
-    const strongPassword =
-      password.length >= 8 &&
-      /[A-Z]/.test(password) &&
-      /[a-z]/.test(password) &&
-      /[0-9]/.test(password) &&
-      /[^A-Za-z0-9]/.test(password);
-
-    if (!strongPassword) {
+    if (!isStrongPassword(password)) {
       return res.status(400).json({
         message:
           "Password must be at least 8 characters and include uppercase, lowercase, number, and special character",
@@ -68,6 +99,9 @@ app.post("/auth/signup", async (req, res) => {
 
     const normalizedEmail = email.trim().toLowerCase();
     const passwordHash = await bcrypt.hash(password, 10);
+    const verificationCode = generateOtpCode();
+    const verificationCodeHash = hashOtpCode(verificationCode);
+    const verificationExpires = getOtpExpiryDate();
 
     await client.query("BEGIN");
 
@@ -80,9 +114,6 @@ app.post("/auth/signup", async (req, res) => {
       const existing = existingUser.rows[0];
 
       if (!existing.email_verified) {
-        const verificationToken = crypto.randomBytes(32).toString("hex");
-        const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-
         await client.query(
           `
           UPDATE users
@@ -91,8 +122,10 @@ app.post("/auth/signup", async (req, res) => {
             last_name = $2,
             phone_number = $3,
             password_hash = $4,
-            email_verification_token = $5,
-            email_verification_expires = $6
+            email_verification_code_hash = $5,
+            email_verification_expires = $6,
+            email_verification_attempts = 0,
+            email_verification_last_sent_at = NOW()
           WHERE email = $7
           `,
           [
@@ -100,18 +133,20 @@ app.post("/auth/signup", async (req, res) => {
             lastName.trim(),
             phoneNumber.trim(),
             passwordHash,
-            verificationToken,
+            verificationCodeHash,
             verificationExpires,
             normalizedEmail,
           ]
         );
 
-        await sendVerificationEmail(normalizedEmail, verificationToken);
+        await sendVerificationCodeEmail(normalizedEmail, verificationCode);
         await client.query("COMMIT");
 
         return res.status(200).json({
           message:
-            "This email is already registered but not yet verified. A new verification email has been sent.",
+            "This email is already registered but not yet verified. A new verification code has been sent.",
+          requiresEmailVerification: true,
+          email: normalizedEmail,
         });
       }
 
@@ -120,9 +155,6 @@ app.post("/auth/signup", async (req, res) => {
         message: "User already exists",
       });
     }
-
-    const verificationToken = crypto.randomBytes(32).toString("hex");
-    const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     await client.query(
       `
@@ -136,10 +168,12 @@ app.post("/auth/signup", async (req, res) => {
         credits,
         extra_credits,
         email_verified,
-        email_verification_token,
-        email_verification_expires
+        email_verification_code_hash,
+        email_verification_expires,
+        email_verification_attempts,
+        email_verification_last_sent_at
       )
-      VALUES ($1, $2, $3, $4, $5, 'free', 15, 0, false, $6, $7)
+      VALUES ($1, $2, $3, $4, $5, 'free', 15, 0, false, $6, $7, 0, NOW())
       `,
       [
         firstName.trim(),
@@ -147,18 +181,19 @@ app.post("/auth/signup", async (req, res) => {
         phoneNumber.trim(),
         normalizedEmail,
         passwordHash,
-        verificationToken,
+        verificationCodeHash,
         verificationExpires,
       ]
     );
 
-    await sendVerificationEmail(normalizedEmail, verificationToken);
+    await sendVerificationCodeEmail(normalizedEmail, verificationCode);
 
     await client.query("COMMIT");
 
     res.status(201).json({
-      message:
-        "Account created successfully. Please check your email to verify your account.",
+      message: "Account created successfully. Enter the verification code sent to your email.",
+      requiresEmailVerification: true,
+      email: normalizedEmail,
     });
   } catch (err) {
     await client.query("ROLLBACK");
@@ -169,46 +204,320 @@ app.post("/auth/signup", async (req, res) => {
   }
 });
 
-app.get("/auth/verify-email", async (req, res) => {
-  try {
-    const { token } = req.query;
+app.get("/auth/verify-email", async (_req, res) => {
+  res
+    .status(410)
+    .send(
+      "Email verification links are no longer supported. Please open the app and enter the verification code sent to your email."
+    );
+});
 
-    if (!token) {
-      return res.status(400).send("Invalid verification link");
+app.post("/auth/verify-email-otp", async (req, res) => {
+  try {
+    const { email, code } = req.body;
+
+    if (!email?.trim() || !code?.trim()) {
+      return res.status(400).json({ message: "Email and verification code are required" });
     }
 
+    const normalizedEmail = email.trim().toLowerCase();
     const result = await pool.query(
       `
-      SELECT id
+      SELECT
+        id,
+        email_verified,
+        email_verification_code_hash,
+        email_verification_expires,
+        email_verification_attempts
       FROM users
-      WHERE email_verification_token = $1
-        AND email_verification_expires > NOW()
+      WHERE email = $1
       `,
-      [token]
+      [normalizedEmail]
     );
 
     if (result.rows.length === 0) {
-      return res.status(400).send("Verification link is invalid or expired");
+      return res.status(400).json({ message: "Invalid email or verification code" });
     }
 
-    const userId = result.rows[0].id;
+    const user = result.rows[0];
+
+    if (user.email_verified) {
+      return res.json({ message: "Email already verified. You can now log in." });
+    }
+
+    if (
+      !user.email_verification_code_hash ||
+      !user.email_verification_expires ||
+      new Date(user.email_verification_expires).getTime() < Date.now()
+    ) {
+      return res.status(400).json({ message: "Verification code is invalid or expired" });
+    }
+
+    if ((user.email_verification_attempts || 0) >= OTP_MAX_ATTEMPTS) {
+      return res.status(400).json({
+        message: "Too many failed attempts. Please request a new verification code.",
+      });
+    }
+
+    if (hashOtpCode(code.trim()) !== user.email_verification_code_hash) {
+      const attempts = (user.email_verification_attempts || 0) + 1;
+
+      await pool.query(
+        `
+        UPDATE users
+        SET
+          email_verification_attempts = $1,
+          email_verification_code_hash = CASE
+            WHEN $1 >= $2 THEN NULL
+            ELSE email_verification_code_hash
+          END,
+          email_verification_expires = CASE
+            WHEN $1 >= $2 THEN NULL
+            ELSE email_verification_expires
+          END
+        WHERE id = $3
+        `,
+        [attempts, OTP_MAX_ATTEMPTS, user.id]
+      );
+
+      return res.status(400).json({
+        message:
+          attempts >= OTP_MAX_ATTEMPTS
+            ? "Too many failed attempts. Please request a new verification code."
+            : "Invalid verification code",
+      });
+    }
 
     await pool.query(
       `
       UPDATE users
       SET
         email_verified = true,
-        email_verification_token = NULL,
-        email_verification_expires = NULL
+        email_verification_code_hash = NULL,
+        email_verification_expires = NULL,
+        email_verification_attempts = 0
       WHERE id = $1
       `,
-      [userId]
+      [user.id]
     );
 
-    res.send("Email verified successfully. You can now return to the app and log in.");
+    res.json({ message: "Email verified successfully. You can now log in." });
   } catch (err) {
     console.error("Email verification error:", err);
-    res.status(500).send("Internal server error");
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+app.post("/auth/resend-verification-code", async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email?.trim()) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const result = await pool.query(
+      `
+      SELECT id, email_verified, email_verification_last_sent_at
+      FROM users
+      WHERE email = $1
+      `,
+      [normalizedEmail]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Account not found" });
+    }
+
+    const user = result.rows[0];
+
+    if (user.email_verified) {
+      return res.status(400).json({ message: "This account is already verified" });
+    }
+
+    const secondsUntilResend = getSecondsUntilResend(user.email_verification_last_sent_at);
+    if (secondsUntilResend > 0) {
+      return res.status(429).json({
+        message: `Please wait ${secondsUntilResend} seconds before requesting another code`,
+      });
+    }
+
+    const verificationCode = generateOtpCode();
+
+    await pool.query(
+      `
+      UPDATE users
+      SET
+        email_verification_code_hash = $1,
+        email_verification_expires = $2,
+        email_verification_attempts = 0,
+        email_verification_last_sent_at = NOW()
+      WHERE id = $3
+      `,
+      [hashOtpCode(verificationCode), getOtpExpiryDate(), user.id]
+    );
+
+    await sendVerificationCodeEmail(normalizedEmail, verificationCode);
+
+    res.json({ message: "A new verification code has been sent to your email." });
+  } catch (err) {
+    console.error("Resend verification code error:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+app.post("/auth/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email?.trim()) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const result = await pool.query(
+      `
+      SELECT id, email_verified, password_reset_last_sent_at
+      FROM users
+      WHERE email = $1
+      `,
+      [normalizedEmail]
+    );
+
+    if (result.rows.length > 0) {
+      const user = result.rows[0];
+
+      if (user.email_verified) {
+        const secondsUntilResend = getSecondsUntilResend(user.password_reset_last_sent_at);
+
+        if (secondsUntilResend === 0) {
+          const resetCode = generateOtpCode();
+
+          await pool.query(
+            `
+            UPDATE users
+            SET
+              password_reset_code_hash = $1,
+              password_reset_expires = $2,
+              password_reset_attempts = 0,
+              password_reset_last_sent_at = NOW()
+            WHERE id = $3
+            `,
+            [hashOtpCode(resetCode), getOtpExpiryDate(), user.id]
+          );
+
+          await sendPasswordResetCodeEmail(normalizedEmail, resetCode);
+        }
+      }
+    }
+
+    res.json({
+      message: "If an account with that email exists, a password reset code has been sent.",
+    });
+  } catch (err) {
+    console.error("Forgot password error:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+app.post("/auth/reset-password", async (req, res) => {
+  try {
+    const { email, code, password } = req.body;
+
+    if (!email?.trim() || !code?.trim() || !password?.trim()) {
+      return res.status(400).json({ message: "Email, reset code, and new password are required" });
+    }
+
+    if (!isStrongPassword(password)) {
+      return res.status(400).json({
+        message:
+          "Password must be at least 8 characters and include uppercase, lowercase, number, and special character",
+      });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const result = await pool.query(
+      `
+      SELECT
+        id,
+        password_reset_code_hash,
+        password_reset_expires,
+        password_reset_attempts
+      FROM users
+      WHERE email = $1
+      `,
+      [normalizedEmail]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(400).json({ message: "Invalid email or reset code" });
+    }
+
+    const user = result.rows[0];
+
+    if (
+      !user.password_reset_code_hash ||
+      !user.password_reset_expires ||
+      new Date(user.password_reset_expires).getTime() < Date.now()
+    ) {
+      return res.status(400).json({ message: "Reset code is invalid or expired" });
+    }
+
+    if ((user.password_reset_attempts || 0) >= OTP_MAX_ATTEMPTS) {
+      return res.status(400).json({
+        message: "Too many failed attempts. Please request a new password reset code.",
+      });
+    }
+
+    if (hashOtpCode(code.trim()) !== user.password_reset_code_hash) {
+      const attempts = (user.password_reset_attempts || 0) + 1;
+
+      await pool.query(
+        `
+        UPDATE users
+        SET
+          password_reset_attempts = $1,
+          password_reset_code_hash = CASE
+            WHEN $1 >= $2 THEN NULL
+            ELSE password_reset_code_hash
+          END,
+          password_reset_expires = CASE
+            WHEN $1 >= $2 THEN NULL
+            ELSE password_reset_expires
+          END
+        WHERE id = $3
+        `,
+        [attempts, OTP_MAX_ATTEMPTS, user.id]
+      );
+
+      return res.status(400).json({
+        message:
+          attempts >= OTP_MAX_ATTEMPTS
+            ? "Too many failed attempts. Please request a new password reset code."
+            : "Invalid reset code",
+      });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    await pool.query(
+      `
+      UPDATE users
+      SET
+        password_hash = $1,
+        password_reset_code_hash = NULL,
+        password_reset_expires = NULL,
+        password_reset_attempts = 0
+      WHERE id = $2
+      `,
+      [passwordHash, user.id]
+    );
+
+    res.json({ message: "Password reset successful. You can now log in." });
+  } catch (err) {
+    console.error("Reset password error:", err);
+    res.status(500).json({ message: "Internal server error" });
   }
 });
 
@@ -220,13 +529,15 @@ app.post("/auth/login", async (req, res) => {
       return res.status(400).json({ message: "Email and password required" });
     }
 
+    const normalizedEmail = email.trim().toLowerCase();
+
     const result = await pool.query(
       `
       SELECT id, email, password_hash, plan, credits, extra_credits, email_verified
       FROM users
       WHERE email = $1
       `,
-      [email]
+      [normalizedEmail]
     );
 
     if (result.rows.length === 0) {
@@ -243,6 +554,8 @@ app.post("/auth/login", async (req, res) => {
     if (!user.email_verified) {
       return res.status(403).json({
         message: "Please verify your email address before logging in",
+        requiresEmailVerification: true,
+        email: user.email,
       });
     }
 
@@ -509,8 +822,17 @@ app.post("/translate", authenticateUser, creditGuard, async (req, res) => {
 
 const PORT = process.env.PORT || 10000;
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+async function startServer() {
+  await ensureAuthSchema();
+
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
+
+startServer().catch((error) => {
+  console.error("Failed to start server:", error);
+  process.exit(1);
 });
 
 // ================= EXPORT =================
