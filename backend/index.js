@@ -694,6 +694,136 @@ app.post("/auth/google", async (req, res) => {
 
 // ================= AI =================
 
+function getModelConfigForPlan(plan) {
+  switch ((plan || "free").toLowerCase()) {
+    case "premium":
+      return { model: "gpt-5.5", temperature: 1.0 };
+    case "basic":
+      return { model: "gpt-5.3", temperature: 0.9 };
+    case "free":
+    default:
+      return { model: "gpt-4o-mini", temperature: 0.7 };
+  }
+}
+
+function getToneGuidance(tone) {
+  switch ((tone || "").trim().toLowerCase()) {
+    case "funny":
+      return "Use light humor and playful phrasing, but keep it warm and socially natural rather than sounding like a joke generator.";
+    case "grateful":
+      return "Make the appreciation feel sincere, specific, and emotionally grounded instead of overly formal or exaggerated.";
+    case "romantic":
+      return "Make it affectionate, intimate, and emotionally soft without sounding cheesy, generic, or overdramatic.";
+    case "professional":
+      return "Keep it polished, respectful, and clear, while still sounding like a real person instead of a corporate template.";
+    case "diplomatic":
+      return "Be tactful, measured, and considerate. Balance honesty with sensitivity and avoid harsh or blunt phrasing.";
+    case "sarcastic":
+      return "Use gentle, controlled sarcasm that feels witty and intentional, not rude, aggressive, or cartoonish.";
+    case "angry":
+      return "Sound upset and firm, but keep the wording coherent, human, and believable rather than explosive or abusive.";
+    case "polite":
+      return "Keep the message courteous, smooth, and thoughtful without sounding stiff.";
+    case "firm":
+      return "Be clear and direct, but not cold. Let the firmness sound human and grounded.";
+    case "neutral":
+      return "Keep it balanced, natural, and easy to read.";
+    default:
+      return tone
+        ? `Honor the requested tone of "${tone}" in a natural, believable way without forcing it.`
+        : "Keep the tone natural, balanced, and human.";
+  }
+}
+
+function getCategoryGuidance(category) {
+  switch ((category || "").trim().toLowerCase()) {
+    case "birthday":
+      return "Make it celebratory and personal. Include warmth, affection, and a detail that makes it feel like it was written for one specific person.";
+    case "anniversary":
+      return "Focus on shared memories, appreciation, and emotional depth. Let it feel reflective and personal.";
+    case "wedding anniversary":
+      return "Blend romance, gratitude, and shared history. Make it feel intimate and meaningful.";
+    case "new month":
+      return "Make it uplifting and forward-looking, but avoid sounding like a generic motivational broadcast.";
+    case "new year":
+      return "Balance hope, reflection, and fresh-start energy. Keep it human and not overly slogan-like.";
+    case "christmas":
+      return "Make it festive, warm, and heartfelt. Avoid sounding mass-produced or like a greeting-card cliché.";
+    case "wedding":
+      return "Sound joyful, affectionate, and celebratory, with a sense of blessing and genuine happiness for the couple.";
+    case "apology":
+      return "Make it accountable, sincere, and emotionally aware. Avoid defensive language, excuses, or empty generic apologies.";
+    case "congratulations":
+      return "Celebrate the achievement with specific, believable enthusiasm instead of broad generic praise.";
+    case "graduation":
+      return "Recognize the effort behind the milestone and sound proud, encouraging, and personal.";
+    case "promotion":
+      return "Acknowledge the hard work, growth, and deserved success behind the achievement.";
+    default:
+      return category
+        ? `Write it in a way that fits the category "${category}" naturally and convincingly.`
+        : "Fit the message naturally to the requested purpose.";
+  }
+}
+
+function getReplySituationGuidance(message) {
+  const normalized = (message || "").toLowerCase();
+
+  if (
+    normalized.includes("sorry") ||
+    normalized.includes("apolog") ||
+    normalized.includes("forgive")
+  ) {
+    return "This appears to be an apology or emotionally sensitive exchange, so the reply should feel emotionally aware and genuine.";
+  }
+
+  if (
+    normalized.includes("congrat") ||
+    normalized.includes("well done") ||
+    normalized.includes("proud of you")
+  ) {
+    return "This appears to be a celebratory or encouraging exchange, so the reply can sound appreciative, warm, and naturally happy.";
+  }
+
+  if (
+    normalized.includes("love") ||
+    normalized.includes("miss you") ||
+    normalized.includes("dear") ||
+    normalized.includes("baby")
+  ) {
+    return "This appears to be an affectionate or intimate exchange, so the reply should sound soft, personal, and emotionally natural.";
+  }
+
+  if (
+    normalized.includes("?") ||
+    normalized.includes("can you") ||
+    normalized.includes("could you") ||
+    normalized.includes("would you")
+  ) {
+    return "This appears to involve a request or question, so the reply should sound direct, relevant, and naturally responsive.";
+  }
+
+  if (
+    normalized.includes("invite") ||
+    normalized.includes("join us") ||
+    normalized.includes("come through") ||
+    normalized.includes("attend")
+  ) {
+    return "This appears to be an invitation or social plan, so the reply should feel friendly, specific, and socially natural.";
+  }
+
+  if (
+    normalized.includes("issue") ||
+    normalized.includes("problem") ||
+    normalized.includes("disappoint") ||
+    normalized.includes("upset")
+  ) {
+    return "This appears to involve tension or dissatisfaction, so the reply should feel measured, human, and emotionally intelligent.";
+  }
+
+  return "Respond directly to the message in a way that feels socially natural, emotionally believable, and context-aware.";
+}
+
 app.post("/generate", authenticateUser, creditGuard, async (req, res) => {
   try {
     const { tone, category, name, gender, relationship, context, language } =
@@ -704,26 +834,48 @@ app.post("/generate", authenticateUser, creditGuard, async (req, res) => {
     }
 
     const finalLanguage = language?.trim() || "English";
-
-    const prompt = `
-You are a message-writing assistant.
-
-IMPORTANT: You MUST write the entire response in ${finalLanguage}. 
-If you cannot write in ${finalLanguage}, respond in English.
-
-Write a ${category} message in a ${tone || "neutral"} tone.
-
-Recipient Gender: ${gender || "Not specified"}
-Recipient Name: ${name || "None"}
-Relationship: ${relationship || "Not specified"}
-Context: ${context || "None"}
-`;
+    const modelConfig = getModelConfigForPlan(req.currentPlan || req.user.plan);
+    const toneGuidance = getToneGuidance(tone || "neutral");
+    const categoryGuidance = getCategoryGuidance(category);
 
     const openai = getOpenAI();
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.7,
+      model: modelConfig.model,
+      messages: [
+        {
+          role: "system",
+          content: `You are a thoughtful personal message writer.
+
+Write messages that sound human, natural, and emotionally believable.
+Use a conversational tone with subtle emotional nuance.
+Let the writing feel personal and slightly imperfect in a realistic way, not robotic or over-polished.
+Avoid generic filler, stiff phrasing, cliches, and repetitive stock expressions.
+Do not sound like a template, an assistant, or a formal corporate writer.
+Vary sentence rhythm and structure naturally.
+Keep the message appropriate to the user's requested tone and context.
+Unless the user clearly asks for a long message, keep it concise and readable.
+
+IMPORTANT: You must write the entire response in ${finalLanguage}. If that is not possible, use English.`,
+        },
+        {
+          role: "user",
+          content: `Write a ${category} message that feels personal and authentic.
+
+Tone: ${tone || "neutral"}
+Recipient name: ${name || "Not specified"}
+Recipient gender: ${gender || "Not specified"}
+Relationship to sender: ${relationship || "Not specified"}
+Context and details to include: ${context || "None"}
+
+Category guidance: ${categoryGuidance}
+Tone guidance: ${toneGuidance}
+
+Make it sound natural, heartfelt when appropriate, and like something a real person would send.
+Avoid generic phrases. Include emotional nuance and conversational warmth.
+If helpful, use small human touches like natural wording, slight imperfection, or specific emotional detail, but do not make the writing sloppy.`,
+        },
+      ],
+      temperature: modelConfig.temperature,
     });
 
     res.json({
@@ -749,21 +901,40 @@ app.post("/respond", authenticateUser, creditGuard, async (req, res) => {
     }
 
     const finalLanguage = language?.trim() || "English";
-
-    const prompt = `
-Respond in ${finalLanguage}.
-
-User message:
-"${message}"
-
-Tone: ${tone || "polite"}
-`;
+    const modelConfig = getModelConfigForPlan(req.currentPlan || req.user.plan);
+    const toneGuidance = getToneGuidance(tone || "polite");
+    const replySituationGuidance = getReplySituationGuidance(message);
 
     const openai = getOpenAI();
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.7,
+      model: modelConfig.model,
+      messages: [
+        {
+          role: "system",
+          content: `You write replies that feel human, relaxed, and socially natural.
+Avoid robotic phrasing, generic polite filler, and overly perfect wording.
+Keep the reply believable, emotionally aware, and conversational.
+Match the user's requested tone without sounding forced.
+Let the reply sound like something a real person would actually send in chat or text.
+Keep it relevant to the message instead of drifting into generic filler.
+Unless the user clearly asks for a long reply, keep it concise and natural.
+
+IMPORTANT: You must write the entire response in ${finalLanguage}. If that is not possible, use English.`,
+        },
+        {
+          role: "user",
+          content: `Reply to the following message in a ${tone || "polite"} tone:
+
+"${message}"
+
+Tone guidance: ${toneGuidance}
+Situation guidance: ${replySituationGuidance}
+
+Make the reply sound natural, personal, and like a real person wrote it.
+Avoid generic phrases, robotic politeness, and stiff template wording.`,
+        },
+      ],
+      temperature: modelConfig.temperature,
     });
 
     res.json({
@@ -789,10 +960,11 @@ app.post("/translate", authenticateUser, creditGuard, async (req, res) => {
     }
 
     const finalLanguage = targetLanguage?.trim() || "English";
+    const modelConfig = getModelConfigForPlan(req.currentPlan || req.user.plan);
 
     const openai = getOpenAI();
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: modelConfig.model,
       messages: [
         {
           role: "system",

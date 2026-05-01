@@ -4,6 +4,7 @@ import { Link, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -11,20 +12,19 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TouchableWithoutFeedback,
   View
 } from "react-native";
-import { useAuth } from "../context/AuthContext";
 import api from "../utils/api";
 
 export default function Signup() {
-  const { login } = useAuth();
   const router = useRouter();
 
   const [showForm, setShowForm] = useState(false);
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [countryCode, setCountryCode] = useState("+234");
+  const [countryCode] = useState("+234");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -32,9 +32,7 @@ export default function Signup() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
 
-  // 🔥 Password rules
   const passwordChecks = useMemo(() => {
     return {
       length: password.length >= 8,
@@ -47,35 +45,23 @@ export default function Signup() {
 
   const isStrongPassword = Object.values(passwordChecks).every(Boolean);
 
-  // 📱 Nigerian phone formatting
   const formatPhone = (value: string) => {
     let digits = value.replace(/\D/g, "");
-
     if (digits.startsWith("0")) digits = digits.slice(1);
     if (digits.length > 10) digits = digits.slice(0, 10);
-
     return digits;
   };
 
   const validateForm = () => {
-    if (
-      !firstName ||
-      !lastName ||
-      !phoneNumber ||
-      !email ||
-      !password
-    ) {
+    if (!firstName || !lastName || !phoneNumber || !email || !password) {
       return "All fields are required";
     }
-
     if (!/\S+@\S+\.\S+/.test(email)) {
       return "Invalid email";
     }
-
     if (!isStrongPassword) {
       return "Password is not strong enough";
     }
-
     return "";
   };
 
@@ -86,7 +72,6 @@ export default function Signup() {
     try {
       setLoading(true);
       setError("");
-      setSuccessMessage("");
 
       const res = await api.post("/auth/signup", {
         firstName,
@@ -96,7 +81,15 @@ export default function Signup() {
         password,
       });
 
-      setSuccessMessage(res?.data?.message || "Check your email to verify.");
+      router.push({
+        pathname: "/verify-email",
+        params: {
+          email: res?.data?.email || email.toLowerCase(),
+          message:
+            res?.data?.message ||
+            "Enter the verification code sent to your email.",
+        },
+      });
     } catch (err: any) {
       setError(err?.response?.data?.message || "Signup failed.");
     } finally {
@@ -144,86 +137,93 @@ export default function Signup() {
   return (
     <KeyboardAvoidingView
       style={styles.wrapper}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 40 : 0}
     >
-      <View style={styles.card}>
-        <ScrollView showsVerticalScrollIndicator={false}>
-          
-          {/* HEADER */}
-          <View style={styles.formHeader}>
-            <Pressable onPress={() => setShowForm(false)}>
-              <Text>← Back</Text>
-            </Pressable>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={styles.card}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingBottom: 60 }}
+          >
 
-            <Pressable onPress={() => router.replace("/login")}>
-              <Text style={styles.link}>Login</Text>
-            </Pressable>
-          </View>
+            {/* HEADER */}
+            <View style={styles.formHeader}>
+              <Pressable onPress={() => setShowForm(false)}>
+                <Text>← Back</Text>
+              </Pressable>
 
-          {/* FLOATING INPUTS */}
-          <FloatingInput label="First Name" value={firstName} setValue={setFirstName} />
-          <FloatingInput label="Last Name" value={lastName} setValue={setLastName} />
+              <Pressable onPress={() => router.replace("/login")}>
+                <Text style={styles.link}>Login</Text>
+              </Pressable>
+            </View>
 
-          {/* PHONE */}
-          <Text style={styles.label}>Phone Number</Text>
-          <View style={styles.phoneRow}>
-            <TextInput style={styles.codeInput} value={countryCode} editable={false} />
-            <TextInput
-              style={styles.phoneInput}
-              value={phoneNumber}
-              onChangeText={(v) => setPhoneNumber(formatPhone(v))}
-              keyboardType="phone-pad"
-              placeholder="8012345678"
-              placeholderTextColor="#9CA3AF"
+            {/* INPUTS */}
+            <FloatingInput label="First Name" value={firstName} setValue={setFirstName} />
+            <FloatingInput label="Last Name" value={lastName} setValue={setLastName} />
+
+            <Text style={styles.label}>Phone Number</Text>
+            <View style={styles.phoneRow}>
+              <TextInput style={styles.codeInput} value={countryCode} editable={false} />
+              <TextInput
+                style={styles.phoneInput}
+                value={phoneNumber}
+                onChangeText={(v) => setPhoneNumber(formatPhone(v))}
+                keyboardType="phone-pad"
+                placeholder="8012345678"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+
+            <FloatingInput
+              label="Email"
+              value={email}
+              setValue={setEmail}
+              keyboardType="email-address"
             />
-          </View>
 
-          {/* EMAIL */}
-          <FloatingInput
-            label="Email"
-            value={email}
-            setValue={setEmail}
-            keyboardType="email-address"
-          />
+            <Text style={styles.label}>Password</Text>
+            <View style={styles.passwordWrapper}>
+              <TextInput
+                style={styles.input}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPassword}
+                placeholder="Create password"
+                placeholderTextColor="#9CA3AF"
+              />
+              <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eye}>
+                <Ionicons name={showPassword ? "eye-off" : "eye"} size={20} />
+              </Pressable>
+            </View>
 
-          {/* PASSWORD */}
-          <Text style={styles.label}>Password</Text>
-          <View style={styles.passwordWrapper}>
-            <TextInput
-              style={styles.input}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-              placeholder="Create password"
-              placeholderTextColor="#9CA3AF"
-            />
-            <Pressable onPress={() => setShowPassword(!showPassword)} style={styles.eye}>
-              <Ionicons name={showPassword ? "eye-off" : "eye"} size={20} />
+            {/* PASSWORD RULES */}
+            <View style={{ marginBottom: 12 }}>
+              {renderCheck("At least 8 characters", passwordChecks.length)}
+              {renderCheck("Uppercase letter", passwordChecks.uppercase)}
+              {renderCheck("Lowercase letter", passwordChecks.lowercase)}
+              {renderCheck("Number", passwordChecks.number)}
+              {renderCheck("Special character", passwordChecks.special)}
+            </View>
+
+            {!!error && <Text style={styles.error}>{error}</Text>}
+
+            <Pressable style={styles.primaryButton} onPress={handleSignup}>
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.primaryText}>Create Account</Text>
+              )}
             </Pressable>
-          </View>
 
-          {/* PASSWORD RULES */}
-          <View style={{ marginBottom: 12 }}>
-            {renderCheck("At least 8 characters", passwordChecks.length)}
-            {renderCheck("Uppercase letter", passwordChecks.uppercase)}
-            {renderCheck("Lowercase letter", passwordChecks.lowercase)}
-            {renderCheck("Number", passwordChecks.number)}
-            {renderCheck("Special character", passwordChecks.special)}
-          </View>
-
-          {!!error && <Text style={styles.error}>{error}</Text>}
-          {!!successMessage && <Text style={styles.success}>{successMessage}</Text>}
-
-          <Pressable style={styles.primaryButton} onPress={handleSignup}>
-            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Create Account</Text>}
-          </Pressable>
-        </ScrollView>
-      </View>
+          </ScrollView>
+        </View>
+      </TouchableWithoutFeedback>
     </KeyboardAvoidingView>
   );
 }
 
-/* FLOATING INPUT COMPONENT */
 const FloatingInput = ({ label, value, setValue, ...props }: any) => {
   const active = value.length > 0;
 

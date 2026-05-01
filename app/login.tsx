@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Link } from "expo-router";
-import { useState } from "react";
+import { Link, useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -14,13 +14,26 @@ import { useAuth } from "../context/AuthContext";
 import api from "../utils/api";
 
 export default function Login() {
+  const router = useRouter();
+  const params = useLocalSearchParams<{ email?: string; message?: string }>();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
 
   const { login } = useAuth();
+
+  useEffect(() => {
+    if (typeof params.email === "string" && params.email) {
+      setEmail(params.email);
+    }
+
+    if (typeof params.message === "string" && params.message) {
+      setInfo(params.message);
+    }
+  }, [params.email, params.message]);
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -31,6 +44,7 @@ export default function Login() {
     try {
       setLoading(true);
       setError("");
+      setInfo("");
 
       const res = await api.post("/auth/login", {
         email: email.trim().toLowerCase(),
@@ -39,10 +53,23 @@ export default function Login() {
 
       await login(res.data.token);
     } catch (err: any) {
-      console.log("❌ LOGIN FAILED:", err?.response?.data || err.message);
+      console.log("LOGIN FAILED:", err?.response?.data || err.message);
+
+      const responseData = err?.response?.data;
+
+      if (responseData?.requiresEmailVerification && responseData?.email) {
+        router.push({
+          pathname: "/verify-email",
+          params: {
+            email: responseData.email,
+            message: responseData.message,
+          },
+        });
+        return;
+      }
 
       setError(
-        err?.response?.data?.message || "Login failed. Please try again."
+        responseData?.message || "Login failed. Please try again."
       );
     } finally {
       setLoading(false);
@@ -91,6 +118,7 @@ export default function Login() {
         </View>
 
         {!!error && <Text style={styles.error}>{error}</Text>}
+        {!!info && <Text style={styles.info}>{info}</Text>}
 
         <Button
           mode="contained"
@@ -101,6 +129,18 @@ export default function Login() {
         >
           Sign In
         </Button>
+
+        <Link
+          href={{
+            pathname: "/forgot-password",
+            params: email ? { email } : undefined,
+          }}
+          asChild
+        >
+          <Pressable style={styles.forgotLinkWrap}>
+            <Text style={styles.forgotLink}>Forgot Password?</Text>
+          </Pressable>
+        </Link>
 
         <Link href="/signup">
           <Button mode="text">Create an account</Button>
@@ -156,8 +196,23 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 8,
   },
+  forgotLinkWrap: {
+    marginTop: 14,
+    alignItems: "center",
+  },
+  forgotLink: {
+    color: "#4F46E5",
+    fontSize: 14,
+    fontWeight: "600",
+  },
   error: {
     color: "red",
+    textAlign: "center",
+    marginBottom: 12,
+    fontSize: 14,
+  },
+  info: {
+    color: "#2563EB",
     textAlign: "center",
     marginBottom: 12,
     fontSize: 14,

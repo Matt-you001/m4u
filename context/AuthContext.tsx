@@ -90,7 +90,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (loading) return;
 
     const inAuthRoute =
-      segments[0] === "login" || segments[0] === "signup";
+      segments[0] === "login" ||
+      segments[0] === "signup" ||
+      segments[0] === "verify-email" ||
+      segments[0] === "forgot-password" ||
+      segments[0] === "reset-password";
 
     if (!token && !inAuthRoute) router.replace("/signup");
     if (token && inAuthRoute) router.replace("/(tabs)");
