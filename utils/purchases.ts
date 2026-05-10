@@ -1,43 +1,150 @@
 import Constants from "expo-constants";
-import Purchases from "react-native-purchases";
+import { Platform } from "react-native";
+import Purchases, { LOG_LEVEL } from "react-native-purchases";
+import RevenueCatUI, { PAYWALL_RESULT } from "react-native-purchases-ui";
 
-const TEST_KEY = "test_hAUFSXISuwFRqhWKUcatrdmbimr";
-const LIVE_KEY = "rc_live_xxxxxxxxx";
+type RevenueCatConfig = {
+  testApiKey?: string;
+  androidApiKey?: string;
+  iosApiKey?: string;
+  basicEntitlementId?: string;
+  premiumEntitlementId?: string;
+  offeringIdentifier?: string;
+};
+
+const FALLBACK_CONFIG: RevenueCatConfig = {
+  testApiKey: "test_hAUFSXISuwFRqhWKUcatrdmbimr",
+  androidApiKey: "goog_eKUGwhpPpECQZLEkXWKauvTitnn",
+  iosApiKey: "",
+  basicEntitlementId: "entl17867c319b",
+  premiumEntitlementId: "entl5d25ec99ce",
+  offeringIdentifier: "default",
+};
+
+let isPurchasesConfigured = false;
+
+function getRevenueCatConfig(): RevenueCatConfig {
+  const extra = Constants.expoConfig?.extra as
+    | {
+        revenuecat?: RevenueCatConfig;
+      }
+    | undefined;
+
+  return {
+    testApiKey:
+      extra?.revenuecat?.testApiKey || FALLBACK_CONFIG.testApiKey,
+    androidApiKey:
+      extra?.revenuecat?.androidApiKey || FALLBACK_CONFIG.androidApiKey,
+    iosApiKey: extra?.revenuecat?.iosApiKey || FALLBACK_CONFIG.iosApiKey,
+    basicEntitlementId:
+      extra?.revenuecat?.basicEntitlementId ||
+      FALLBACK_CONFIG.basicEntitlementId,
+    premiumEntitlementId:
+      extra?.revenuecat?.premiumEntitlementId ||
+      FALLBACK_CONFIG.premiumEntitlementId,
+    offeringIdentifier:
+      extra?.revenuecat?.offeringIdentifier ||
+      FALLBACK_CONFIG.offeringIdentifier,
+  };
+}
+
+function getRevenueCatApiKey() {
+  const isExpoGo = Constants.executionEnvironment === "storeClient";
+  const config = getRevenueCatConfig();
+
+  if (isExpoGo) {
+    return config.testApiKey;
+  }
+
+  if (Platform.OS === "android") {
+    return config.androidApiKey;
+  }
+
+  if (Platform.OS === "ios") {
+    return config.iosApiKey;
+  }
+
+  return null;
+}
+
+async function getConfiguredOffering() {
+  const { offeringIdentifier } = getRevenueCatConfig();
+
+  if (!offeringIdentifier) {
+    return null;
+  }
+
+  const offerings = await Purchases.getOfferings();
+
+  if (offeringIdentifier === "default") {
+    return offerings.current ?? null;
+  }
+
+  return offerings.all[offeringIdentifier] ?? offerings.current ?? null;
+}
 
 export async function configurePurchases() {
+  if (isPurchasesConfigured) {
+    return;
+  }
+
   try {
-    const isExpoGo =
-      Constants.executionEnvironment === "storeClient";
+    const apiKey = getRevenueCatApiKey();
 
-    const key = isExpoGo ? TEST_KEY : LIVE_KEY;
+    if (!apiKey) {
+      throw new Error(
+        `Missing RevenueCat API key for platform "${Platform.OS}".`
+      );
+    }
 
-    await Purchases.configure({ apiKey: key });
+    Purchases.setLogLevel(LOG_LEVEL.VERBOSE);
+    await Purchases.configure({ apiKey });
 
-    console.log("✅ RevenueCat configured");
+    isPurchasesConfigured = true;
+    console.log("RevenueCat configured");
   } catch (e) {
-    console.log("❌ configure error:", e);
+    console.log("RevenueCat configure error:", e);
   }
 }
 
 export async function initPurchases(userId: string) {
   try {
+    await configurePurchases();
+
+    if (!userId) {
+      return;
+    }
+
     await Purchases.logIn(String(userId));
-    console.log("✅ RevenueCat login:", userId);
+    console.log("RevenueCat login:", userId);
   } catch (e) {
-    console.log("❌ RevenueCat login error:", e);
+    console.log("RevenueCat login error:", e);
   }
 }
 
-export async function buyPackage(identifier: string) {
-  const offerings = await Purchases.getOfferings();
+export async function presentSubscriptionPaywall() {
+  await configurePurchases();
 
-  const pkg = offerings.current?.availablePackages.find(
-    (p) => p.identifier === identifier
-  );
+  const { premiumEntitlementId } = getRevenueCatConfig();
+  const offering = await getConfiguredOffering();
 
-  if (!pkg) throw new Error("Package not found");
+  const paywallResult = premiumEntitlementId
+    ? await RevenueCatUI.presentPaywallIfNeeded({
+        requiredEntitlementIdentifier: premiumEntitlementId,
+        offering: offering ?? undefined,
+      })
+    : await RevenueCatUI.presentPaywall({
+        offering: offering ?? undefined,
+      });
 
-  const { customerInfo } = await Purchases.purchasePackage(pkg);
-
-  return customerInfo;
+  switch (paywallResult) {
+    case PAYWALL_RESULT.PURCHASED:
+    case PAYWALL_RESULT.RESTORED:
+      return true;
+    case PAYWALL_RESULT.NOT_PRESENTED:
+    case PAYWALL_RESULT.ERROR:
+    case PAYWALL_RESULT.CANCELLED:
+    default:
+      return false;
+  }
 }

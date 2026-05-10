@@ -6,11 +6,12 @@ const MAX_HISTORY_ITEMS = 20; // 🔥 threshold
 
 export type HistoryItem = {
   id: string;
-  type: 'respond' | 'translate' | 'result';
+  type: 'respond' | 'translate' | 'result' | 'corporate';
   inputText: string;
   outputText: string;
   tone?: string;
   language: string;
+  platform?: string;
   createdAt: number;
 };
 

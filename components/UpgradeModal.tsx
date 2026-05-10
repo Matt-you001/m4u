@@ -4,9 +4,15 @@ import { Modal, Pressable, Text, View } from 'react-native';
 export default function UpgradeModal({
   visible,
   onClose,
+  canWatchAd = false,
+  onWatchAd,
+  watchAdLoading = false,
 }: {
   visible: boolean;
   onClose: () => void;
+  canWatchAd?: boolean;
+  onWatchAd?: () => void;
+  watchAdLoading?: boolean;
 }) {
   return (
     <Modal transparent visible={visible} animationType="fade">
@@ -61,16 +67,16 @@ export default function UpgradeModal({
           </Pressable>
 
           {/* WATCH AD */}
-          <Pressable
-            onPress={() => {
-              onClose();
-              router.push('/upgrade'); // replace later with ad logic
-            }}
-          >
-            <Text style={{ marginTop: 10, color: '#16a34a', fontWeight: '600' }}>
-              Watch Ad (+1 Credit)
-            </Text>
-          </Pressable>
+          {canWatchAd && (
+            <Pressable
+              onPress={onWatchAd}
+              disabled={watchAdLoading}
+            >
+              <Text style={{ marginTop: 10, color: '#16a34a', fontWeight: '600' }}>
+                {watchAdLoading ? 'Loading Ad...' : 'Watch Ad (+1 Credit)'}
+              </Text>
+            </Pressable>
+          )}
         </View>
       </View>
     </Modal>

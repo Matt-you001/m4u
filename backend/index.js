@@ -586,6 +586,55 @@ app.post("/auth/login", async (req, res) => {
   }
 });
 
+app.post("/ads/reward", authenticateUser, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const { rows } = await pool.query(
+      `
+      SELECT plan, credits, extra_credits
+      FROM users
+      WHERE id = $1
+      `,
+      [userId]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const user = rows[0];
+
+    if (user.plan !== "free") {
+      return res.status(403).json({
+        error: "Ad rewards are available to free users only",
+      });
+    }
+
+    const updated = await pool.query(
+      `
+      UPDATE users
+      SET extra_credits = extra_credits + 1
+      WHERE id = $1
+      RETURNING credits, extra_credits
+      `,
+      [userId]
+    );
+
+    const balance = updated.rows[0];
+
+    res.json({
+      success: true,
+      added: 1,
+      totalCredits: balance.credits + balance.extra_credits,
+      message: "Credit added successfully",
+    });
+  } catch (err) {
+    console.error("Ad reward error:", err);
+    res.status(500).json({ error: "Failed to add ad credit" });
+  }
+});
+
 // ================= GOOGLE AUTH =================
 
 app.post("/auth/google", async (req, res) => {
@@ -766,6 +815,101 @@ function getCategoryGuidance(category) {
   }
 }
 
+function getBusinessToneGuidance(tone) {
+  switch ((tone || "").trim().toLowerCase()) {
+    case "professional":
+      return "Keep the copy clear, polished, and trustworthy without sounding dry or overly corporate.";
+    case "persuasive":
+      return "Highlight value and encourage action confidently, but avoid sounding pushy, manipulative, or spammy.";
+    case "friendly":
+      return "Sound approachable, warm, and customer-friendly while staying business-appropriate.";
+    case "urgent":
+      return "Create momentum and time sensitivity, but keep it credible and not alarmist.";
+    case "luxury":
+      return "Use refined, elevated language that feels premium and aspirational without sounding exaggerated.";
+    case "confident":
+      return "Sound assured, competent, and convincing while staying natural and believable.";
+    case "warm":
+      return "Make the message welcoming and relationship-oriented while still sounding business-focused.";
+    case "exciting":
+      return "Use energetic wording that feels fresh and lively without becoming noisy or childish.";
+    case "direct":
+      return "Be concise, punchy, and easy to act on without sounding abrupt.";
+    default:
+      return tone
+        ? `Honor the requested business tone of "${tone}" naturally and convincingly.`
+        : "Keep the business message natural, persuasive, and easy to act on.";
+  }
+}
+
+function getCorporateGoalGuidance(category) {
+  switch ((category || "").trim().toLowerCase()) {
+    case "promotion":
+      return "Focus on visibility, excitement, and a clear reason for the audience to care right now.";
+    case "sales":
+      return "Emphasize value, problem-solving, and a clear buying motivation without sounding desperate.";
+    case "offer":
+      return "Lead with the deal clearly, explain the benefit, and make the next step obvious.";
+    case "product launch":
+      return "Introduce the product as something new and compelling, highlighting the most attractive benefits.";
+    case "announcement":
+      return "Be clear, informative, and audience-friendly while keeping the writing polished.";
+    case "reminder":
+      return "Sound helpful and timely rather than nagging. Keep the message easy to scan.";
+    case "customer retention":
+      return "Reinforce trust, appreciation, and continued value to keep customers engaged.";
+    case "holiday campaign":
+      return "Blend seasonal energy with promotional clarity. Make it timely and relevant.";
+    case "event marketing":
+      return "Build anticipation, explain the value of attending, and include a strong invitation.";
+    case "follow-up":
+      return "Keep it courteous, purposeful, and specific about the next step or expected response.";
+    case "email campaign":
+      return "Structure the message so it reads well as marketing email copy with a clear hook and call to action.";
+    default:
+      return category
+        ? `Write it in a way that naturally suits the business goal "${category}".`
+        : "Fit the business message naturally to the requested purpose.";
+  }
+}
+
+function getPlatformGuidance(platform) {
+  switch ((platform || "").trim().toLowerCase()) {
+    case "instagram":
+      return "Keep it visually punchy, scroll-stopping, and caption-friendly. Favor short lines, promotional energy, and wording that works well with a clear call to action.";
+    case "whatsapp":
+      return "Make it feel direct, personal, and easy to read in chat format. It should sound like a business message that still feels human and conversational.";
+    case "x":
+      return "Keep it concise, sharp, and easy to scan quickly. Focus on one main hook and avoid unnecessary filler.";
+    case "facebook":
+      return "Balance clarity and warmth, with enough detail to feel informative but not long-winded. It should work well as a public-facing business post.";
+    case "email":
+      return "Make it read like business email copy with a clear opening hook, useful detail, and strong call to action. Structure it so it feels polished and easy to skim.";
+    case "sms":
+      return "Keep it short, direct, and immediately actionable. Every word should earn its place.";
+    case "linkedin":
+      return "Use a professional and credible tone suitable for business audiences. It should sound polished, thoughtful, and brand-safe.";
+    case "website":
+      return "Make it headline-friendly and polished, with clear value, strong clarity, and wording that could fit a website hero, banner, or featured section.";
+    default:
+      return platform
+        ? `Adapt the wording so it feels appropriate for ${platform}.`
+        : "Adapt the writing to the requested platform naturally.";
+  }
+}
+
+function getLengthGuidance(messageLength) {
+  switch ((messageLength || "").trim().toLowerCase()) {
+    case "short":
+      return "Keep it compact, punchy, and immediately usable.";
+    case "long":
+      return "Allow more detail, explanation, and structure while staying engaging and readable.";
+    case "medium":
+    default:
+      return "Keep it balanced: detailed enough to persuade, but still concise and easy to scan.";
+  }
+}
+
 function getReplySituationGuidance(message) {
   const normalized = (message || "").toLowerCase();
 
@@ -826,8 +970,22 @@ function getReplySituationGuidance(message) {
 
 app.post("/generate", authenticateUser, creditGuard, async (req, res) => {
   try {
-    const { tone, category, name, gender, relationship, context, language } =
-      req.body;
+    const {
+      mode = "individual",
+      tone,
+      category,
+      name,
+      sender,
+      relationship,
+      context,
+      language,
+      businessName,
+      productName,
+      platform,
+      audience,
+      callToAction,
+      messageLength,
+    } = req.body;
 
     if (!category) {
       return res.status(400).json({ error: "Category is required" });
@@ -835,8 +993,19 @@ app.post("/generate", authenticateUser, creditGuard, async (req, res) => {
 
     const finalLanguage = language?.trim() || "English";
     const modelConfig = getModelConfigForPlan(req.currentPlan || req.user.plan);
-    const toneGuidance = getToneGuidance(tone || "neutral");
-    const categoryGuidance = getCategoryGuidance(category);
+    const isCorporateMode = String(mode).trim().toLowerCase() === "corporate";
+    const toneGuidance = isCorporateMode
+      ? getBusinessToneGuidance(tone || "professional")
+      : getToneGuidance(tone || "neutral");
+    const categoryGuidance = isCorporateMode
+      ? getCorporateGoalGuidance(category)
+      : getCategoryGuidance(category);
+    const platformGuidance = isCorporateMode
+      ? getPlatformGuidance(platform)
+      : "";
+    const lengthGuidance = isCorporateMode
+      ? getLengthGuidance(messageLength)
+      : "";
 
     const openai = getOpenAI();
     const completion = await openai.chat.completions.create({
@@ -844,7 +1013,16 @@ app.post("/generate", authenticateUser, creditGuard, async (req, res) => {
       messages: [
         {
           role: "system",
-          content: `You are a thoughtful personal message writer.
+          content: isCorporateMode
+            ? `You are a skilled business copywriter for small businesses, creators, and brands.
+
+Write marketing and business messages that sound natural, credible, and audience-aware.
+Keep the writing persuasive and polished without sounding spammy, robotic, or like generic ad copy.
+Adapt the message to the requested platform, business goal, audience, and tone.
+Use clear benefits, natural wording, and a believable call to action.
+Do not sound like a stiff corporate memo, a template, or an AI assistant.
+Unless the user explicitly asks for a long message, keep it readable and easy to use immediately.`
+            : `You are a thoughtful personal message writer.
 
 Write messages that sound human, natural, and emotionally believable.
 Use a conversational tone with subtle emotional nuance.
@@ -859,11 +1037,31 @@ IMPORTANT: You must write the entire response in ${finalLanguage}. If that is no
         },
         {
           role: "user",
-          content: `Write a ${category} message that feels personal and authentic.
+          content: isCorporateMode
+            ? `Write a ${category} business message.
+
+Tone: ${tone || "professional"}
+Business name: ${businessName || "Not specified"}
+Product or service: ${productName || "Not specified"}
+Platform: ${platform || "Not specified"}
+Target audience: ${audience || "Not specified"}
+Message length: ${messageLength || "Medium"}
+Offer details and campaign context: ${context || "None"}
+Call to action to include: ${callToAction || "Not specified"}
+
+Business goal guidance: ${categoryGuidance}
+Business tone guidance: ${toneGuidance}
+Platform guidance: ${platformGuidance}
+Length guidance: ${lengthGuidance}
+
+Make it sound like thoughtful, effective business copy a real brand could send.
+Keep it audience-aware, natural, and persuasive.
+Avoid generic buzzwords, robotic ad language, and empty hype.`
+            : `Write a ${category} message that feels personal and authentic.
 
 Tone: ${tone || "neutral"}
 Recipient name: ${name || "Not specified"}
-Recipient gender: ${gender || "Not specified"}
+Sender's name: ${sender || "Not specified"}
 Relationship to sender: ${relationship || "Not specified"}
 Context and details to include: ${context || "None"}
 

@@ -1,10 +1,10 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import ProfileMenu from 'components/ProfileMenu';
 import { useRouter } from 'expo-router';
+import { BannerAd } from 'react-native-google-mobile-ads';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
-
-type Plan = 'free' | 'basic' | 'premium';
+import { bannerAdUnitId, defaultBannerSize } from '../../utils/admob';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -13,7 +13,6 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <View style={styles.logoWrap}>
           <Text style={styles.logoMain}>m</Text>
@@ -27,25 +26,21 @@ export default function HomeScreen() {
           lastName={lastName}
           plan={plan}
           credits={credits}
-          onUpgrade={() => router.push("/upgrade")}
-          onSettings={() => router.push("/settings")}
-          onProfile={() => router.push("/profile")}
-          onLogin={() => router.push("/login")}
+          onUpgrade={() => router.push('/upgrade')}
+          onSettings={() => router.push('/settings')}
+          onProfile={() => router.push('/profile')}
+          onLogin={() => router.push('/login')}
           onLogout={logout}
         />
       </View>
 
-      {/* Hero */}
       <View style={styles.hero}>
-        <Text style={styles.heroTitle}>
-          Say the right thing.
-        </Text>
+        <Text style={styles.heroTitle}>Say the right thing.</Text>
         <Text style={styles.heroSubtitle}>
           Generate, respond, and refine messages with ease.
         </Text>
       </View>
 
-      {/* Action Cards */}
       <View style={styles.actions}>
         <TouchableOpacity
           style={styles.card}
@@ -81,23 +76,24 @@ export default function HomeScreen() {
           style={styles.card}
           onPress={() => router.push('/history')}
         >
-          <MaterialCommunityIcons
-            name="history"
-            size={28}
-            color="#4F46E5"
-          />
+          <MaterialCommunityIcons name="history" size={28} color="#4F46E5" />
           <Text style={styles.cardSecondaryTitle}>History</Text>
-          <Text style={styles.cardSubtitle}>
-            View and reuse past messages.
-          </Text>
+          <Text style={styles.cardSubtitle}>View and reuse past messages.</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Footer */}
       <View style={styles.footer}>
-        <Text style={styles.footerText}>
-          Crafted for clarity ✨
-        </Text>
+        {plan === 'free' ? (
+          <View style={styles.bannerWrap}>
+            <BannerAd
+              unitId={bannerAdUnitId}
+              size={defaultBannerSize}
+              requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+            />
+          </View>
+        ) : (
+          <Text style={styles.footerText}>Crafted for clarity</Text>
+        )}
       </View>
     </View>
   );
@@ -109,16 +105,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
     paddingHorizontal: 16,
   },
-
-  /* Header */
   header: {
     paddingTop: 50,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-
-  /* Logo */
   logoWrap: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -135,8 +127,6 @@ const styles = StyleSheet.create({
     color: '#111827',
     marginHorizontal: 1,
   },
-
-  /* Hero */
   hero: {
     marginTop: 40,
     marginBottom: 28,
@@ -151,8 +141,6 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginTop: 6,
   },
-
-  /* Cards */
   actions: {
     gap: 16,
   },
@@ -165,10 +153,11 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 3,
   },
-  cardSecondary: {
-    backgroundColor: '#F3F4F6',
-    borderRadius: 18,
-    padding: 18,
+  cardSecondaryTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 10,
+    color: '#111827',
   },
   cardTitle: {
     fontSize: 18,
@@ -176,23 +165,19 @@ const styles = StyleSheet.create({
     marginTop: 12,
     color: '#111827',
   },
-  cardSecondaryTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginTop: 10,
-    color: '#111827',
-  },
   cardSubtitle: {
     fontSize: 14,
     color: '#6B7280',
     marginTop: 4,
   },
-
-  /* Footer */
   footer: {
     marginTop: 'auto',
     paddingVertical: 18,
     alignItems: 'center',
+  },
+  bannerWrap: {
+    alignItems: 'center',
+    width: '100%',
   },
   footerText: {
     fontSize: 13,

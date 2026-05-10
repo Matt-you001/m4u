@@ -31,6 +31,13 @@
       "expo-router",
       "@react-native-google-signin/google-signin",
       [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-3940256099942544~3347511713",
+          "iosAppId": "ca-app-pub-3940256099942544~1458002511"
+        }
+      ],
+      [
         "expo-speech-recognition",
         {
           "microphonePermission": "Allow Message4u to use your microphone for voice prompts.",
@@ -57,6 +64,22 @@
     },
     "extra": {
       "router": {},
+      "revenuecat": {
+        "testApiKey": "test_hAUFSXISuwFRqhWKUcatrdmbimr",
+        "androidApiKey": "goog_eKUGwhpPpECQZLEkXWKauvTitnn",
+        "iosApiKey": "",
+        "basicEntitlementId": "entl17867c319b",
+        "premiumEntitlementId": "entl5d25ec99ce",
+        "offeringIdentifier": "default"
+      },
+      "admob": {
+        "androidBannerAdUnitId": "ca-app-pub-3940256099942544/9214589741",
+        "iosBannerAdUnitId": "ca-app-pub-3940256099942544/2435281174",
+        "androidInterstitialAdUnitId": "ca-app-pub-3940256099942544/1033173712",
+        "iosInterstitialAdUnitId": "ca-app-pub-3940256099942544/4411468910",
+        "androidRewardedAdUnitId": "ca-app-pub-3940256099942544/5224354917",
+        "iosRewardedAdUnitId": "ca-app-pub-3940256099942544/1712485313"
+      },
       "eas": {
         "projectId": "39b5dff0-684e-46b4-996d-9840d4defe6d"
       }

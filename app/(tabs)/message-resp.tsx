@@ -1,11 +1,18 @@
 import UpgradeModal from '@/components/UpgradeModal';
 import { useAuth } from '@/context/AuthContext';
+import {
+  bannerAdUnitId,
+  defaultBannerSize,
+  maybeShowInterstitialAd,
+  showRewardedAd,
+} from '@/utils/admob';
 import api from '@/utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
 import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { IconButton } from 'react-native-paper';
+import { BannerAd } from 'react-native-google-mobile-ads';
 import MessageActions from '../../components/MessageActions';
 import { saveToHistory } from '../../utils/history';
 
@@ -22,6 +29,7 @@ export default function RespondMessage() {
   const [translation, setTranslation] = useState('');
   const [loading, setLoading] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const [watchAdLoading, setWatchAdLoading] = useState(false);
   const [error, setError] = useState('');
 
   const [defaults, setDefaults] = useState({
@@ -77,6 +85,35 @@ export default function RespondMessage() {
     return null;
   }, [language, customLanguage, defaults.translationLanguage]);
 
+  const handleWatchAd = async () => {
+    if (watchAdLoading || plan !== 'free') return;
+
+    try {
+      setWatchAdLoading(true);
+      setError('');
+
+      const earnedReward = await showRewardedAd();
+
+      if (!earnedReward) {
+        setError('You need to complete the rewarded ad to receive a credit.');
+        return;
+      }
+
+      await api.post('/ads/reward');
+      await refreshUser();
+      setShowUpgrade(false);
+      setError('Reward received. 1 credit has been added to your account.');
+    } catch (err: any) {
+      setError(
+        err?.response?.data?.error ||
+          err?.message ||
+          'Could not complete the ad reward right now.'
+      );
+    } finally {
+      setWatchAdLoading(false);
+    }
+  };
+
   const handleRespond = async () => {
     if (!inputText.trim()) return;
 
@@ -93,6 +130,7 @@ export default function RespondMessage() {
 
       setResponse(res.data.result);
       await refreshUser();
+      await maybeShowInterstitialAd(plan);
 
       if (TEST_MODE || plan !== 'free') {
         await saveToHistory({
@@ -140,6 +178,7 @@ export default function RespondMessage() {
 
       setTranslation(res.data.result);
       await refreshUser();
+      await maybeShowInterstitialAd(plan);
 
       if (TEST_MODE || plan !== 'free') {
         await saveToHistory({
@@ -173,6 +212,7 @@ export default function RespondMessage() {
 
         <TextInput
           placeholder="Paste message"
+          placeholderTextColor="#9CA3AF"
           value={inputText}
           onChangeText={setInputText}
           multiline
@@ -181,7 +221,12 @@ export default function RespondMessage() {
 
         <Text style={styles.label}>Tone</Text>
         <View style={styles.pickerBox}>
-          <Picker selectedValue={tone} onValueChange={setTone}>
+          <Picker
+            selectedValue={tone}
+            onValueChange={setTone}
+            style={styles.picker}
+            dropdownIconColor="#6B7280"
+          >
             <Picker.Item label="Use default" value="" />
             <Picker.Item label="Funny" value="Funny" />
             <Picker.Item label="Grateful" value="Grateful" />
@@ -197,6 +242,7 @@ export default function RespondMessage() {
         {tone === 'Other' && (
           <TextInput
             placeholder="Custom tone"
+            placeholderTextColor="#9CA3AF"
             value={customTone}
             onChangeText={setCustomTone}
             style={styles.input}
@@ -205,7 +251,12 @@ export default function RespondMessage() {
 
         <Text style={styles.label}>Language</Text>
         <View style={styles.pickerBox}>
-          <Picker selectedValue={language} onValueChange={setLanguage}>
+          <Picker
+            selectedValue={language}
+            onValueChange={setLanguage}
+            style={styles.picker}
+            dropdownIconColor="#6B7280"
+          >
             <Picker.Item label="Use default" value="" />
             <Picker.Item label="English" value="English" />
             <Picker.Item label="French" value="French" />
@@ -227,6 +278,7 @@ export default function RespondMessage() {
         {language === 'Other' && (
           <TextInput
             placeholder="Custom language"
+            placeholderTextColor="#9CA3AF"
             value={customLanguage}
             onChangeText={setCustomLanguage}
             style={styles.input}
@@ -269,11 +321,24 @@ export default function RespondMessage() {
             <MessageActions text={response} />
           </View>
         )}
+
+        {plan === 'free' && (
+          <View style={styles.bannerWrap}>
+            <BannerAd
+              unitId={bannerAdUnitId}
+              size={defaultBannerSize}
+              requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+            />
+          </View>
+        )}
       </ScrollView>
 
       <UpgradeModal 
           visible={showUpgrade}
           onClose={() => setShowUpgrade(false)}
+          canWatchAd={plan === 'free'}
+          onWatchAd={handleWatchAd}
+          watchAdLoading={watchAdLoading}
         />
       </>
   );
@@ -293,8 +358,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#D1D5DB',
     marginBottom: 14,
+  },
+  picker: {
+    color: '#111827',
   },
   input: {
     backgroundColor: '#fff',
@@ -302,13 +370,19 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginBottom: 14,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#D1D5DB',
+    color: '#111827',
   },
   iconRow: { flexDirection: 'row', justifyContent: 'space-around', marginVertical: 20 },
   iconBox: { alignItems: 'center' },
   iconButton: { color: '#4F46E5' },
   primaryText: { color: '#000', fontWeight: 'bold', fontSize: 16 },
   resultCard: { backgroundColor: '#ECFEFF', padding: 14, borderRadius: 10, marginTop: 12 },
+  bannerWrap: {
+    marginTop: 18,
+    marginBottom: 10,
+    alignItems: 'center',
+  },
   resultText: { fontSize: 16 },
   errorText: {
     color: 'red',
