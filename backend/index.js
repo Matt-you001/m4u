@@ -82,7 +82,8 @@ function getSecondsUntilResend(lastSentAt) {
 function getRevenueCatWebhookConfig() {
   return {
     authHeader: process.env.REVENUECAT_WEBHOOK_AUTH || "",
-    basicEntitlementId: process.env.REVENUECAT_BASIC_ENTITLEMENT_ID || "entl17867c319b",
+    basicEntitlementId:
+      process.env.REVENUECAT_BASIC_ENTITLEMENT_ID || "entl17867c319b",
     premiumEntitlementId:
       process.env.REVENUECAT_PREMIUM_ENTITLEMENT_ID || "entl5d25ec99ce",
   };
@@ -102,16 +103,36 @@ function extractCandidateUserIdsFromRevenueCatEvent(event) {
   )];
 }
 
-function getPlanFromRevenueCatEntitlements(entitlementIds = []) {
+function getPlanFromRevenueCatEntitlements(entitlementIds = [], productId = "") {
   const { basicEntitlementId, premiumEntitlementId } =
     getRevenueCatWebhookConfig();
-  const normalized = entitlementIds.map((item) => String(item || "").trim());
 
-  if (normalized.includes(premiumEntitlementId)) {
+  const normalized = entitlementIds
+    .map((item) => String(item || "").trim().toLowerCase())
+    .filter(Boolean);
+  const normalizedProductId = String(productId || "").trim().toLowerCase();
+  const premiumKeys = [
+    premiumEntitlementId,
+    "m4u premium",
+    "premium",
+  ].map((item) => String(item || "").trim().toLowerCase());
+  const basicKeys = [
+    basicEntitlementId,
+    "m4u basic",
+    "basic",
+  ].map((item) => String(item || "").trim().toLowerCase());
+
+  if (
+    normalized.some((item) => premiumKeys.includes(item)) ||
+    normalizedProductId.includes("premium")
+  ) {
     return "premium";
   }
 
-  if (normalized.includes(basicEntitlementId)) {
+  if (
+    normalized.some((item) => basicKeys.includes(item)) ||
+    normalizedProductId.includes("basic")
+  ) {
     return "basic";
   }
 
@@ -174,6 +195,7 @@ async function handleRevenueCatWebhookEvent(event) {
     : event?.entitlement_id
       ? [event.entitlement_id]
       : [];
+  const productId = event?.product_id || "";
 
   let nextPlan = null;
 
@@ -185,7 +207,7 @@ async function handleRevenueCatWebhookEvent(event) {
     case "SUBSCRIPTION_EXTENDED":
     case "TEMPORARY_ENTITLEMENT_GRANT":
     case "NON_RENEWING_PURCHASE":
-      nextPlan = getPlanFromRevenueCatEntitlements(entitlementIds);
+      nextPlan = getPlanFromRevenueCatEntitlements(entitlementIds, productId);
       break;
     case "EXPIRATION":
       nextPlan = "free";
