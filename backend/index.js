@@ -42,6 +42,11 @@ app.get("/hello", (req, res) => {
 const OTP_TTL_MINUTES = 10;
 const OTP_RESEND_COOLDOWN_SECONDS = 60;
 const OTP_MAX_ATTEMPTS = 5;
+const PLAN_LIMITS = {
+  free: 15,
+  basic: 50,
+  premium: 100,
+};
 
 function isStrongPassword(password) {
   return (
@@ -73,6 +78,157 @@ function getSecondsUntilResend(lastSentAt) {
 
   return remainingMs > 0 ? Math.ceil(remainingMs / 1000) : 0;
 }
+
+function getRevenueCatWebhookConfig() {
+  return {
+    authHeader: process.env.REVENUECAT_WEBHOOK_AUTH || "",
+    basicEntitlementId: process.env.REVENUECAT_BASIC_ENTITLEMENT_ID || "entl17867c319b",
+    premiumEntitlementId:
+      process.env.REVENUECAT_PREMIUM_ENTITLEMENT_ID || "entl5d25ec99ce",
+  };
+}
+
+function extractCandidateUserIdsFromRevenueCatEvent(event) {
+  const candidates = [
+    event?.app_user_id,
+    event?.original_app_user_id,
+    ...(Array.isArray(event?.aliases) ? event.aliases : []),
+  ];
+
+  return [...new Set(
+    candidates
+      .map((value) => String(value || "").trim())
+      .filter((value) => /^[0-9]+$/.test(value))
+  )];
+}
+
+function getPlanFromRevenueCatEntitlements(entitlementIds = []) {
+  const { basicEntitlementId, premiumEntitlementId } =
+    getRevenueCatWebhookConfig();
+  const normalized = entitlementIds.map((item) => String(item || "").trim());
+
+  if (normalized.includes(premiumEntitlementId)) {
+    return "premium";
+  }
+
+  if (normalized.includes(basicEntitlementId)) {
+    return "basic";
+  }
+
+  return "free";
+}
+
+async function updateUserPlanFromRevenueCat(userId, nextPlan) {
+  const result = await pool.query(
+    `
+    SELECT plan, credits, extra_credits
+    FROM users
+    WHERE id = $1
+    `,
+    [userId]
+  );
+
+  if (!result.rows.length) {
+    return { updated: false, reason: "User not found" };
+  }
+
+  const currentUser = result.rows[0];
+  const currentPlan = currentUser.plan || "free";
+
+  if (currentPlan === nextPlan) {
+    return { updated: false, reason: "Plan already in sync" };
+  }
+
+  await pool.query(
+    `
+    UPDATE users
+    SET
+      plan = $1,
+      credits = $2,
+      extra_credits = 0,
+      last_credit_reset = NOW()
+    WHERE id = $3
+    `,
+    [nextPlan, PLAN_LIMITS[nextPlan] || PLAN_LIMITS.free, userId]
+  );
+
+  return { updated: true, previousPlan: currentPlan, nextPlan };
+}
+
+async function handleRevenueCatWebhookEvent(event) {
+  const eventType = String(event?.type || "").trim();
+
+  if (!eventType || eventType === "TEST") {
+    return;
+  }
+
+  const candidateUserIds = extractCandidateUserIdsFromRevenueCatEvent(event);
+
+  if (!candidateUserIds.length) {
+    console.log("RevenueCat webhook ignored: no numeric app user id found");
+    return;
+  }
+
+  const entitlementIds = Array.isArray(event?.entitlement_ids)
+    ? event.entitlement_ids
+    : event?.entitlement_id
+      ? [event.entitlement_id]
+      : [];
+
+  let nextPlan = null;
+
+  switch (eventType) {
+    case "INITIAL_PURCHASE":
+    case "RENEWAL":
+    case "PRODUCT_CHANGE":
+    case "UNCANCELLATION":
+    case "SUBSCRIPTION_EXTENDED":
+    case "TEMPORARY_ENTITLEMENT_GRANT":
+    case "NON_RENEWING_PURCHASE":
+      nextPlan = getPlanFromRevenueCatEntitlements(entitlementIds);
+      break;
+    case "EXPIRATION":
+      nextPlan = "free";
+      break;
+    case "CANCELLATION":
+    case "BILLING_ISSUE":
+    case "TRANSFER":
+    default:
+      return;
+  }
+
+  for (const userId of candidateUserIds) {
+    const syncResult = await updateUserPlanFromRevenueCat(userId, nextPlan);
+    if (syncResult.updated) {
+      console.log(
+        `RevenueCat sync: user ${userId} plan updated from ${syncResult.previousPlan} to ${syncResult.nextPlan} via ${eventType}`
+      );
+      return;
+    }
+  }
+
+  console.log(
+    `RevenueCat sync: no plan change applied for event ${eventType} and candidate ids ${candidateUserIds.join(", ")}`
+  );
+}
+
+app.post("/integrations/revenuecat/webhook", async (req, res) => {
+  try {
+    const { authHeader } = getRevenueCatWebhookConfig();
+    const requestAuthHeader = req.headers.authorization || "";
+
+    if (authHeader && requestAuthHeader !== authHeader) {
+      return res.status(401).json({ error: "Unauthorized webhook" });
+    }
+
+    res.status(200).json({ received: true });
+
+    const event = req.body?.event;
+    await handleRevenueCatWebhookEvent(event);
+  } catch (err) {
+    console.error("RevenueCat webhook error:", err);
+  }
+});
 
 app.post("/auth/signup", async (req, res) => {
   const client = await pool.connect();
