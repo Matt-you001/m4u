@@ -81,7 +81,7 @@ export default function ProfileMenu({
                 <Text style={styles.credits}>Credits: {credits}</Text>
               </View>
 
-              {plan === 'free' && (
+              {plan !== 'premium' && (
                 <TouchableOpacity style={styles.item} onPress={handleUpgrade}>
                   <Text style={styles.upgrade}>⬆️ Upgrade Plan</Text>
                 </TouchableOpacity>

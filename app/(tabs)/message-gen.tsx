@@ -102,7 +102,7 @@ const CORPORATE_AUDIENCES = [
 
 export default function GenerateScreen() {
   const router = useRouter();
-  const { plan, refreshUser } = useAuth();
+  const { plan, refreshUser, clearSession } = useAuth();
   const [mode, setMode] = useState<GeneratorMode>('individual');
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [watchAdLoading, setWatchAdLoading] = useState(false);
@@ -464,6 +464,13 @@ export default function GenerateScreen() {
     } catch (err: any) {
       if (err.response?.status === 402) {
         setShowUpgrade(true);
+      } else if (err.response?.status === 401) {
+        await clearSession();
+        setError('Your session has expired. Please log in again.');
+        router.replace({
+          pathname: '/login',
+          params: { message: 'Your session has expired. Please log in again.' },
+        });
       } else {
         setError(
           err?.response?.data?.debug ||

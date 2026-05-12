@@ -9,6 +9,7 @@ import {
 import api from '@/utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
+import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { IconButton } from 'react-native-paper';
@@ -19,7 +20,8 @@ import { saveToHistory } from '../../utils/history';
 const TEST_MODE = true;
 
 export default function RespondMessage() {
-  const { plan, refreshUser } = useAuth();
+  const router = useRouter();
+  const { plan, refreshUser, clearSession } = useAuth();
   const [inputText, setInputText] = useState('');
   const [tone, setTone] = useState('');
   const [customTone, setCustomTone] = useState('');
@@ -146,6 +148,13 @@ export default function RespondMessage() {
     } catch (err: any) {
       if (err.response?.status === 402) {
         setShowUpgrade(true);
+      } else if (err.response?.status === 401) {
+        await clearSession();
+        setError('Your session has expired. Please log in again.');
+        router.replace({
+          pathname: '/login',
+          params: { message: 'Your session has expired. Please log in again.' },
+        });
       } else {
         setError(
           err?.response?.data?.debug ||
@@ -193,6 +202,13 @@ export default function RespondMessage() {
     } catch (err: any) {
       if (err.response?.status === 402) {
         setShowUpgrade(true);
+      } else if (err.response?.status === 401) {
+        await clearSession();
+        setError('Your session has expired. Please log in again.');
+        router.replace({
+          pathname: '/login',
+          params: { message: 'Your session has expired. Please log in again.' },
+        });
       } else {
         setError(
           err?.response?.data?.debug ||

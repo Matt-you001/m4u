@@ -10,7 +10,7 @@ import {
 } from "./lib/mailer.js";
 import { getOpenAI } from "./lib/openai.js";
 import { authenticateUser } from "./middleware/auth.js";
-import { creditGuard } from "./middleware/creditGuard.js";
+import { consumeCredit, creditGuard } from "./middleware/creditGuard.js";
 import userRoutes from "./routes/user.js";
 
 const app = express();
@@ -924,13 +924,84 @@ app.post("/auth/google", async (req, res) => {
 function getModelConfigForPlan(plan) {
   switch ((plan || "free").toLowerCase()) {
     case "premium":
-      return { model: "gpt-5.5", temperature: 1.0 };
+      return {
+        primaryModel: process.env.OPENAI_PREMIUM_MODEL || "gpt-4.1",
+        fallbackModel: process.env.OPENAI_PREMIUM_FALLBACK_MODEL || "gpt-4.1-mini",
+        temperature: 1.0,
+      };
     case "basic":
-      return { model: "gpt-5.3", temperature: 0.9 };
+      return {
+        primaryModel: process.env.OPENAI_BASIC_MODEL || "gpt-4.1-mini",
+        fallbackModel: process.env.OPENAI_BASIC_FALLBACK_MODEL || "gpt-4o-mini",
+        temperature: 0.9,
+      };
     case "free":
     default:
-      return { model: "gpt-4o-mini", temperature: 0.7 };
+      return {
+        primaryModel: process.env.OPENAI_FREE_MODEL || "gpt-4o-mini",
+        fallbackModel: process.env.OPENAI_FREE_FALLBACK_MODEL || "gpt-4o-mini",
+        temperature: 0.7,
+      };
   }
+}
+
+function isModelUnavailableError(error) {
+  const message = String(
+    error?.message || error?.error?.message || error?.response?.data?.error?.message || ""
+  ).toLowerCase();
+  const code = String(error?.code || error?.error?.code || "").toLowerCase();
+  const status = Number(error?.status || error?.response?.status || 0);
+
+  return (
+    status === 404 ||
+    code === "model_not_found" ||
+    message.includes("does not exist") ||
+    message.includes("do not have access")
+  );
+}
+
+async function createChatCompletionWithFallback(openai, modelConfig, options) {
+  try {
+    return await openai.chat.completions.create({
+      ...options,
+      model: modelConfig.primaryModel,
+    });
+  } catch (error) {
+    if (
+      modelConfig.fallbackModel &&
+      modelConfig.fallbackModel !== modelConfig.primaryModel &&
+      isModelUnavailableError(error)
+    ) {
+      console.warn(
+        `Primary model "${modelConfig.primaryModel}" unavailable, retrying with "${modelConfig.fallbackModel}".`
+      );
+
+      return openai.chat.completions.create({
+        ...options,
+        model: modelConfig.fallbackModel,
+      });
+    }
+
+    throw error;
+  }
+}
+
+function handleAiRouteError(res, error, fallbackMessage) {
+  if (error?.statusCode === 401) {
+    return res.status(401).json({ message: "Your session has expired. Please log in again." });
+  }
+
+  if (error?.statusCode === 402) {
+    return res.status(402).json({
+      error: "Out of credits",
+      upgradeRequired: true,
+    });
+  }
+
+  return res.status(500).json({
+    message: fallbackMessage,
+    debug: error.message,
+  });
 }
 
 function getToneGuidance(tone) {
@@ -1186,8 +1257,7 @@ app.post("/generate", authenticateUser, creditGuard, async (req, res) => {
       : "";
 
     const openai = getOpenAI();
-    const completion = await openai.chat.completions.create({
-      model: modelConfig.model,
+    const completion = await createChatCompletionWithFallback(openai, modelConfig, {
       messages: [
         {
           role: "system",
@@ -1254,16 +1324,15 @@ If helpful, use small human touches like natural wording, slight imperfection, o
       temperature: modelConfig.temperature,
     });
 
+    const { remainingCredits } = await consumeCredit(req.user.id);
+
     res.json({
       result: completion.choices[0].message.content,
-      remainingCredits: req.remainingCredits,
+      remainingCredits,
     });
   } catch (error) {
     console.error("❌ AI ERROR:", error);
-    res.status(500).json({
-      message: "AI generation failed",
-      debug: error.message,
-    });
+    return handleAiRouteError(res, error, "AI generation failed");
   }
 });
 
@@ -1282,8 +1351,7 @@ app.post("/respond", authenticateUser, creditGuard, async (req, res) => {
     const replySituationGuidance = getReplySituationGuidance(message);
 
     const openai = getOpenAI();
-    const completion = await openai.chat.completions.create({
-      model: modelConfig.model,
+    const completion = await createChatCompletionWithFallback(openai, modelConfig, {
       messages: [
         {
           role: "system",
@@ -1313,16 +1381,15 @@ Avoid generic phrases, robotic politeness, and stiff template wording.`,
       temperature: modelConfig.temperature,
     });
 
+    const { remainingCredits } = await consumeCredit(req.user.id);
+
     res.json({
       result: completion.choices[0].message.content,
-      remainingCredits: req.remainingCredits,
+      remainingCredits,
     });
   } catch (error) {
     console.error("❌ RESPOND ERROR:", error);
-    res.status(500).json({
-      message: "AI response failed",
-      debug: error.message,
-    });
+    return handleAiRouteError(res, error, "AI response failed");
   }
 });
 
@@ -1339,8 +1406,7 @@ app.post("/translate", authenticateUser, creditGuard, async (req, res) => {
     const modelConfig = getModelConfigForPlan(req.currentPlan || req.user.plan);
 
     const openai = getOpenAI();
-    const completion = await openai.chat.completions.create({
-      model: modelConfig.model,
+    const completion = await createChatCompletionWithFallback(openai, modelConfig, {
       messages: [
         {
           role: "system",
@@ -1355,16 +1421,15 @@ app.post("/translate", authenticateUser, creditGuard, async (req, res) => {
       temperature: 0,
     });
 
+    const { remainingCredits } = await consumeCredit(req.user.id);
+
     res.json({
       result: completion.choices[0].message.content,
-      remainingCredits: req.remainingCredits,
+      remainingCredits,
     });
   } catch (error) {
     console.error("❌ TRANSLATE ERROR:", error);
-    res.status(500).json({
-      message: "AI translation failed",
-      debug: error.message,
-    });
+    return handleAiRouteError(res, error, "AI translation failed");
   }
 });
 

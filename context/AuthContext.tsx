@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { ActivityIndicator, View } from "react-native";
+import { setAuthStore } from "../store/authStore";
 import api from "../utils/api";
 import { configurePurchases, initPurchases } from "../utils/purchases";
 
@@ -23,6 +24,7 @@ type AuthContextType = {
   lastName: string;
   login: (token: string) => Promise<void>;
   logout: () => Promise<void>;
+  clearSession: () => Promise<void>;
   refreshUser: () => Promise<any>;
 };
 
@@ -39,29 +41,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const segments = useSegments();
 
+  const clearSession = useCallback(async () => {
+    await AsyncStorage.removeItem("token");
+    delete api.defaults.headers.common.Authorization;
+
+    setToken(null);
+    setPlan("free");
+    setCredits(0);
+    setFirstName("");
+    setLastName("");
+  }, []);
+
   const refreshUser = useCallback(async () => {
     try {
       const res = await api.get("/user/me");
+      const totalCredits =
+        typeof res.data.totalCredits === "number"
+          ? res.data.totalCredits
+          : (res.data.credits ?? 0) + (res.data.extraCredits ?? 0);
 
       setPlan(res.data.plan || "free");
-      setCredits(res.data.credits || 0);
+      setCredits(totalCredits);
       setFirstName(res.data.firstName || "");
       setLastName(res.data.lastName || "");
 
       console.log(
-        "✅ user refreshed:",
+        "user refreshed:",
         res.data.plan,
-        res.data.credits,
+        totalCredits,
         res.data.firstName,
         res.data.lastName
       );
 
       return res.data;
-    } catch (err) {
-      console.log("❌ failed to refresh user", err);
+    } catch (err: any) {
+      if (err?.response?.status === 401) {
+        await clearSession();
+      }
+
+      console.log("failed to refresh user", err);
       return null;
     }
-  }, []);
+  }, [clearSession]);
 
   useEffect(() => {
     const bootstrap = async () => {
@@ -85,6 +106,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     bootstrap();
   }, [refreshUser]);
+
+  useEffect(() => {
+    setAuthStore({ refreshUser, clearSession });
+
+    return () => {
+      setAuthStore(null);
+    };
+  }, [clearSession, refreshUser]);
 
   useEffect(() => {
     if (loading) return;
@@ -115,15 +144,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    await AsyncStorage.removeItem("token");
-    delete api.defaults.headers.common.Authorization;
-
-    setToken(null);
-    setPlan("free");
-    setCredits(0);
-    setFirstName("");
-    setLastName("");
-
+    await clearSession();
     router.replace("/signup");
   };
 
@@ -142,6 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         login,
         logout,
+        clearSession,
         refreshUser,
         plan,
         credits,
