@@ -2,12 +2,6 @@ import { pool } from "../db.js";
 
 export const creditGuard = async (req, res, next) => {
   try {
-    if (process.env.DISABLE_CREDITS === "true") {
-      req.currentPlan = req.user.plan || "free";
-      req.remainingCredits = 999999;
-      return next();
-    }
-
     const userId = req.user.id;
 
     const { rows } = await pool.query(
