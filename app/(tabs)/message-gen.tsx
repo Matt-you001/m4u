@@ -102,7 +102,7 @@ const CORPORATE_AUDIENCES = [
 
 export default function GenerateScreen() {
   const router = useRouter();
-  const { plan, refreshUser, clearSession } = useAuth();
+  const { plan, credits, refreshUser, clearSession, setAvailableCredits } = useAuth();
   const [mode, setMode] = useState<GeneratorMode>('individual');
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [watchAdLoading, setWatchAdLoading] = useState(false);
@@ -442,6 +442,10 @@ export default function GenerateScreen() {
 
       const generatedText = (res?.data?.result || '').trim();
       setResult(generatedText);
+      const nextCredits = Number(res?.data?.remainingCredits);
+      setAvailableCredits(
+        Number.isFinite(nextCredits) ? nextCredits : Math.max(0, credits - 1)
+      );
 
       await refreshUser();
       await maybeShowInterstitialAd(plan);

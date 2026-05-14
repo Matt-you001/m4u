@@ -21,7 +21,7 @@ const TEST_MODE = true;
 
 export default function RespondMessage() {
   const router = useRouter();
-  const { plan, refreshUser, clearSession } = useAuth();
+  const { plan, credits, refreshUser, clearSession, setAvailableCredits } = useAuth();
   const [inputText, setInputText] = useState('');
   const [tone, setTone] = useState('');
   const [customTone, setCustomTone] = useState('');
@@ -131,6 +131,10 @@ export default function RespondMessage() {
       });
 
       setResponse(res.data.result);
+      const nextCredits = Number(res?.data?.remainingCredits);
+      setAvailableCredits(
+        Number.isFinite(nextCredits) ? nextCredits : Math.max(0, credits - 1)
+      );
       await refreshUser();
       await maybeShowInterstitialAd(plan);
 
@@ -186,6 +190,10 @@ export default function RespondMessage() {
       });
 
       setTranslation(res.data.result);
+      const nextCredits = Number(res?.data?.remainingCredits);
+      setAvailableCredits(
+        Number.isFinite(nextCredits) ? nextCredits : Math.max(0, credits - 1)
+      );
       await refreshUser();
       await maybeShowInterstitialAd(plan);
 

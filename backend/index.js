@@ -10,7 +10,7 @@ import {
 } from "./lib/mailer.js";
 import { getOpenAI } from "./lib/openai.js";
 import { authenticateUser } from "./middleware/auth.js";
-import { consumeCredit, creditGuard } from "./middleware/creditGuard.js";
+import { creditGuard } from "./middleware/creditGuard.js";
 import userRoutes from "./routes/user.js";
 
 const app = express();
@@ -1324,11 +1324,9 @@ If helpful, use small human touches like natural wording, slight imperfection, o
       temperature: modelConfig.temperature,
     });
 
-    const { remainingCredits } = await consumeCredit(req.user.id);
-
     res.json({
       result: completion.choices[0].message.content,
-      remainingCredits,
+      remainingCredits: req.remainingCredits,
     });
   } catch (error) {
     console.error("❌ AI ERROR:", error);
@@ -1381,11 +1379,9 @@ Avoid generic phrases, robotic politeness, and stiff template wording.`,
       temperature: modelConfig.temperature,
     });
 
-    const { remainingCredits } = await consumeCredit(req.user.id);
-
     res.json({
       result: completion.choices[0].message.content,
-      remainingCredits,
+      remainingCredits: req.remainingCredits,
     });
   } catch (error) {
     console.error("❌ RESPOND ERROR:", error);
@@ -1421,11 +1417,9 @@ app.post("/translate", authenticateUser, creditGuard, async (req, res) => {
       temperature: 0,
     });
 
-    const { remainingCredits } = await consumeCredit(req.user.id);
-
     res.json({
       result: completion.choices[0].message.content,
-      remainingCredits,
+      remainingCredits: req.remainingCredits,
     });
   } catch (error) {
     console.error("❌ TRANSLATE ERROR:", error);

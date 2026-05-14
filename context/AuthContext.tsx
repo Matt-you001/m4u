@@ -25,6 +25,7 @@ type AuthContextType = {
   login: (token: string) => Promise<void>;
   logout: () => Promise<void>;
   clearSession: () => Promise<void>;
+  setAvailableCredits: (credits: number) => void;
   refreshUser: () => Promise<any>;
 };
 
@@ -148,6 +149,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     router.replace("/signup");
   };
 
+  const setAvailableCredits = useCallback((nextCredits: number) => {
+    setCredits(Math.max(0, Number(nextCredits) || 0));
+  }, []);
+
   if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
@@ -164,6 +169,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         clearSession,
+        setAvailableCredits,
         refreshUser,
         plan,
         credits,

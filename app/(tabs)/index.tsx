@@ -1,15 +1,56 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import ProfileMenu from 'components/ProfileMenu';
 import { useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import { BannerAd } from 'react-native-google-mobile-ads';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { bannerAdUnitId, defaultBannerSize } from '../../utils/admob';
+import api from '../../utils/api';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { plan, credits, logout, token, firstName, lastName } = useAuth();
+  const { plan, credits, logout, token, firstName, lastName, refreshUser } = useAuth();
   const isLoggedIn = !!token;
+  const [menuPlan, setMenuPlan] = useState(plan);
+  const [menuCredits, setMenuCredits] = useState(credits);
+  const [menuFirstName, setMenuFirstName] = useState(firstName);
+  const [menuLastName, setMenuLastName] = useState(lastName);
+
+  useEffect(() => {
+    setMenuPlan(plan);
+    setMenuCredits(credits);
+    setMenuFirstName(firstName);
+    setMenuLastName(lastName);
+  }, [credits, firstName, lastName, plan]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!token) return;
+
+      const syncMenu = async () => {
+        await refreshUser();
+
+        try {
+          const res = await api.get('/user/me');
+          const totalCredits =
+            typeof res.data.totalCredits === 'number'
+              ? res.data.totalCredits
+              : (res.data.credits ?? 0) + (res.data.extraCredits ?? 0);
+
+          setMenuPlan(res.data.plan || 'free');
+          setMenuCredits(totalCredits);
+          setMenuFirstName(res.data.firstName || '');
+          setMenuLastName(res.data.lastName || '');
+        } catch (err) {
+          console.log('home menu sync failed', err);
+        }
+      };
+
+      syncMenu();
+    }, [refreshUser, token])
+  );
 
   return (
     <View style={styles.container}>
@@ -22,10 +63,10 @@ export default function HomeScreen() {
 
         <ProfileMenu
           isLoggedIn={isLoggedIn}
-          firstName={firstName}
-          lastName={lastName}
-          plan={plan}
-          credits={credits}
+          firstName={menuFirstName}
+          lastName={menuLastName}
+          plan={menuPlan}
+          credits={menuCredits}
           onUpgrade={() => router.push('/upgrade')}
           onSettings={() => router.push('/settings')}
           onProfile={() => router.push('/profile')}
@@ -83,7 +124,7 @@ export default function HomeScreen() {
       </View>
 
       <View style={styles.footer}>
-        {plan === 'free' ? (
+        {menuPlan === 'free' ? (
           <View style={styles.bannerWrap}>
             <BannerAd
               unitId={bannerAdUnitId}
