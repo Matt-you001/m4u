@@ -1064,6 +1064,29 @@ function getCategoryGuidance(category) {
   }
 }
 
+function getIndividualLengthGuidance(category) {
+  switch ((category || "").trim().toLowerCase()) {
+    case "birthday":
+    case "congratulations":
+    case "graduation":
+    case "promotion":
+    case "new month":
+    case "new year":
+    case "christmas":
+      return "Keep it punchy, warm, and easy to send as a quick personal message. Prefer one compact paragraph, or two very short paragraphs at most.";
+    case "apology":
+      return "Allow a little more room for sincerity, accountability, and emotional clarity, but still keep it within one to two short paragraphs.";
+    case "romantic":
+    case "anniversary":
+    case "wedding anniversary":
+      return "Let it breathe a little more than a casual text if needed, but keep it intimate, concise, and still within two short paragraphs.";
+    case "wedding":
+      return "Keep it celebratory and heartfelt, but concise enough to feel like a real personal message rather than a speech.";
+    default:
+      return "Keep it short enough for a real one-to-one text or WhatsApp message. Default to one short paragraph and never exceed two short paragraphs unless the user explicitly asks for something longer.";
+  }
+}
+
 function getBusinessToneGuidance(tone) {
   switch ((tone || "").trim().toLowerCase()) {
     case "professional":
@@ -1255,6 +1278,25 @@ app.post("/generate", authenticateUser, creditGuard, async (req, res) => {
     const lengthGuidance = isCorporateMode
       ? getLengthGuidance(messageLength)
       : "";
+    const personalLengthGuidance = getIndividualLengthGuidance(category);
+    const senderGuidance = sender?.trim()
+      ? `If it feels natural, you may include the sender's name "${sender.trim()}" in a short sign-off or closing.`
+      : "Do not add a signature, sender label, placeholder name, or anything like '[Your Name]', 'Warm regards, [Your Name]', or 'From, [Name]'.";
+    const individualPromptDetails = [
+      `Tone: ${tone || "neutral"}`,
+      name?.trim() ? `Recipient name: ${name.trim()}` : "",
+      sender?.trim() ? `Sender's name: ${sender.trim()}` : "",
+      relationship?.trim()
+        ? `Relationship to sender: ${relationship.trim()}`
+        : "",
+      context?.trim()
+        ? `Context and details to include: ${context.trim()}`
+        : "Context and details to include: None",
+      `Length guidance: ${personalLengthGuidance}`,
+      `Sender guidance: ${senderGuidance}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
 
     const openai = getOpenAI();
     const completion = await createChatCompletionWithFallback(openai, modelConfig, {
@@ -1279,7 +1321,10 @@ Avoid generic filler, stiff phrasing, cliches, and repetitive stock expressions.
 Do not sound like a template, an assistant, or a formal corporate writer.
 Vary sentence rhythm and structure naturally.
 Keep the message appropriate to the user's requested tone and context.
-Unless the user clearly asks for a long message, keep it concise and readable.
+Keep the message short and suitable for one-to-one personal messaging apps like text and WhatsApp.
+Default to one short paragraph and never exceed two short paragraphs unless the user explicitly asks for something longer.
+Follow any category-specific length guidance provided in the user prompt.
+Do not add a signature, sender placeholder, or closing name unless the sender's name is explicitly provided and it fits naturally.
 
 IMPORTANT: You must write the entire response in ${finalLanguage}. If that is not possible, use English.`,
         },
@@ -1307,18 +1352,15 @@ Keep it audience-aware, natural, and persuasive.
 Avoid generic buzzwords, robotic ad language, and empty hype.`
             : `Write a ${category} message that feels personal and authentic.
 
-Tone: ${tone || "neutral"}
-Recipient name: ${name || "Not specified"}
-Sender's name: ${sender || "Not specified"}
-Relationship to sender: ${relationship || "Not specified"}
-Context and details to include: ${context || "None"}
+${individualPromptDetails}
 
 Category guidance: ${categoryGuidance}
 Tone guidance: ${toneGuidance}
 
 Make it sound natural, heartfelt when appropriate, and like something a real person would send.
 Avoid generic phrases. Include emotional nuance and conversational warmth.
-If helpful, use small human touches like natural wording, slight imperfection, or specific emotional detail, but do not make the writing sloppy.`,
+If helpful, use small human touches like natural wording, slight imperfection, or specific emotional detail, but do not make the writing sloppy.
+Keep it concise and immediately usable as a personal message.`,
         },
       ],
       temperature: modelConfig.temperature,
