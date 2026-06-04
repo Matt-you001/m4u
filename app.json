@@ -66,10 +66,10 @@
       "router": {},
       "revenuecat": {
         "testApiKey": "test_hAUFSXISuwFRqhWKUcatrdmbimr",
-        "androidApiKey": "goog_eKUGwhpPpECQZLEkXWKauvTitnn",
+        "androidApiKey": "goog_QOIJOUpuYylDMEyMNsgqaXRophJ",
         "iosApiKey": "",
-        "basicEntitlementId": "entl17867c319b",
-        "premiumEntitlementId": "entl5d25ec99ce",
+        "basicEntitlementId": "entl48c716552a",
+        "premiumEntitlementId": "entl459591f140",
         "offeringIdentifier": "default"
       },
       "admob": {

@@ -84,6 +84,8 @@ function getRevenueCatWebhookConfig() {
     authHeader: process.env.REVENUECAT_WEBHOOK_AUTH || "",
     basicEntitlementId:
       process.env.REVENUECAT_BASIC_ENTITLEMENT_ID || "entl48c716552a",
+    premiumEntitlementId:
+      process.env.REVENUECAT_PREMIUM_ENTITLEMENT_ID || "entl459591f140",
   };
 }
 
@@ -107,8 +109,17 @@ function getPlanFromRevenueCatEntitlements(entitlementIds = [], productId = "") 
 
   const normalized = entitlementIds
     .map((item) => String(item || "").trim().toLowerCase())
-    .filter(Boolean);
+      .filter(Boolean);
   const normalizedProductId = String(productId || "").trim().toLowerCase();
+
+  if (normalizedProductId.includes("premium")) {
+    return "premium";
+  }
+
+  if (normalizedProductId.includes("basic")) {
+    return "basic";
+  }
+
   const premiumKeys = [
     premiumEntitlementId,
     "m4u premium",
@@ -120,17 +131,11 @@ function getPlanFromRevenueCatEntitlements(entitlementIds = [], productId = "") 
     "basic",
   ].map((item) => String(item || "").trim().toLowerCase());
 
-  if (
-    normalized.some((item) => premiumKeys.includes(item)) ||
-    normalizedProductId.includes("premium")
-  ) {
+  if (normalized.some((item) => premiumKeys.includes(item))) {
     return "premium";
   }
 
-  if (
-    normalized.some((item) => basicKeys.includes(item)) ||
-    normalizedProductId.includes("basic")
-  ) {
+  if (normalized.some((item) => basicKeys.includes(item))) {
     return "basic";
   }
 

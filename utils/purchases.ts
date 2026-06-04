@@ -14,10 +14,10 @@ type RevenueCatConfig = {
 
 const FALLBACK_CONFIG: RevenueCatConfig = {
   testApiKey: "test_hAUFSXISuwFRqhWKUcatrdmbimr",
-  androidApiKey: "goog_eKUGwhpPpECQZLEkXWKauvTitnn",
+  androidApiKey: "goog_QOIJOUpuYylDMEyMNsgqaXRophJ",
   iosApiKey: "",
-  basicEntitlementId: "entl17867c319b",
-  premiumEntitlementId: "entl5d25ec99ce",
+  basicEntitlementId: "entl48c716552a",
+  premiumEntitlementId: "entl459591f140",
   offeringIdentifier: "default",
 };
 
@@ -95,10 +95,15 @@ async function getConfiguredOffering() {
   const offerings = await Purchases.getOfferings();
 
   if (offeringIdentifier === "default") {
-    return offerings.current ?? null;
+    return offerings.current ?? Object.values(offerings.all || {})[0] ?? null;
   }
 
-  return offerings.all[offeringIdentifier] ?? offerings.current ?? null;
+  return (
+    offerings.all[offeringIdentifier] ??
+    offerings.current ??
+    Object.values(offerings.all || {})[0] ??
+    null
+  );
 }
 
 export async function configurePurchases() {
@@ -159,16 +164,37 @@ export async function presentSubscriptionPaywall() {
   await configurePurchases();
 
   const { premiumEntitlementId } = getRevenueCatConfig();
-  const offering = await getConfiguredOffering();
+  let offering = null;
 
-  const paywallResult = premiumEntitlementId
-    ? await RevenueCatUI.presentPaywallIfNeeded({
-        requiredEntitlementIdentifier: premiumEntitlementId,
-        offering: offering ?? undefined,
-      })
-    : await RevenueCatUI.presentPaywall({
-        offering: offering ?? undefined,
-      });
+  try {
+    offering = await getConfiguredOffering();
+  } catch (error) {
+    console.log("RevenueCat getOfferings error:", error);
+  }
+
+  let paywallResult;
+
+  try {
+    paywallResult = premiumEntitlementId
+      ? await RevenueCatUI.presentPaywallIfNeeded({
+          requiredEntitlementIdentifier: premiumEntitlementId,
+          offering: offering ?? undefined,
+        })
+      : await RevenueCatUI.presentPaywall({
+          offering: offering ?? undefined,
+        });
+  } catch (error) {
+    console.log("RevenueCat paywall-if-needed error:", {
+      error,
+      offeringIdentifier: getRevenueCatConfig().offeringIdentifier,
+      premiumEntitlementId,
+      hasOffering: Boolean(offering),
+    });
+
+    paywallResult = await RevenueCatUI.presentPaywall({
+      offering: offering ?? undefined,
+    });
+  }
 
   switch (paywallResult) {
     case PAYWALL_RESULT.PURCHASED:
