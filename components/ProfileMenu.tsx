@@ -12,6 +12,7 @@ type Props = {
   onUpgrade: () => void;
   onSettings: () => void;
   onProfile: () => void;
+  onDeleteAccount: () => void;
   onLogin: () => void;
   onLogout: () => void;
 };
@@ -25,6 +26,7 @@ export default function ProfileMenu({
   onUpgrade,
   onSettings,
   onProfile,
+  onDeleteAccount,
   onLogin,
   onLogout,
 }: Props) {
@@ -50,6 +52,11 @@ export default function ProfileMenu({
   const handleProfile = () => {
     setOpen(false);
     onProfile && onProfile();
+  };
+
+  const handleDeleteAccount = () => {
+    setOpen(false);
+    onDeleteAccount && onDeleteAccount();
   };
 
   const handleLogin = () => {
@@ -83,25 +90,29 @@ export default function ProfileMenu({
 
               {plan !== 'premium' && (
                 <TouchableOpacity style={styles.item} onPress={handleUpgrade}>
-                  <Text style={styles.upgrade}>⬆️ Upgrade Plan</Text>
+                  <Text style={styles.upgrade}>Upgrade Plan</Text>
                 </TouchableOpacity>
               )}
 
               <TouchableOpacity style={styles.item} onPress={handleSettings}>
-                <Text style={styles.text}>⚙️ Settings</Text>
+                <Text style={styles.text}>Settings</Text>
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.item} onPress={handleProfile}>
-                <Text style={styles.text}>👤 Update Profile</Text>
+                <Text style={styles.text}>Update Profile</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.item} onPress={handleDeleteAccount}>
+                <Text style={styles.deleteText}>Delete Account</Text>
               </TouchableOpacity>
 
               <TouchableOpacity style={styles.item} onPress={handleLogout}>
-                <Text style={styles.text}>🚪 Logout</Text>
+                <Text style={styles.text}>Logout</Text>
               </TouchableOpacity>
             </>
           ) : (
             <TouchableOpacity style={styles.item} onPress={handleLogin}>
-              <Text style={styles.text}>🔐 Login</Text>
+              <Text style={styles.text}>Login</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -191,5 +202,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#2563EB',
+  },
+
+  deleteText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#B91C1C',
   },
 });

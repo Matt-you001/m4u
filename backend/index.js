@@ -43,9 +43,9 @@ const OTP_TTL_MINUTES = 10;
 const OTP_RESEND_COOLDOWN_SECONDS = 60;
 const OTP_MAX_ATTEMPTS = 5;
 const PLAN_LIMITS = {
-  free: 15,
+  free: 10,
   basic: 50,
-  premium: 100,
+  premium: 80,
 };
 
 function isStrongPassword(password) {
@@ -83,9 +83,7 @@ function getRevenueCatWebhookConfig() {
   return {
     authHeader: process.env.REVENUECAT_WEBHOOK_AUTH || "",
     basicEntitlementId:
-      process.env.REVENUECAT_BASIC_ENTITLEMENT_ID || "entl17867c319b",
-    premiumEntitlementId:
-      process.env.REVENUECAT_PREMIUM_ENTITLEMENT_ID || "entl5d25ec99ce",
+      process.env.REVENUECAT_BASIC_ENTITLEMENT_ID || "entl48c716552a",
   };
 }
 
@@ -351,7 +349,7 @@ app.post("/auth/signup", async (req, res) => {
         email_verification_attempts,
         email_verification_last_sent_at
       )
-      VALUES ($1, $2, $3, $4, $5, 'free', 15, 0, false, $6, $7, 0, NOW())
+      VALUES ($1, $2, $3, $4, $5, 'free', 10, 0, false, $6, $7, 0, NOW())
       `,
       [
         firstName.trim(),
@@ -848,7 +846,7 @@ app.post("/auth/google", async (req, res) => {
           extra_credits,
           email_verified
         )
-        VALUES ($1, $2, $3, 'free', 15, 0, true)
+        VALUES ($1, $2, $3, 'free', 10, 0, true)
         RETURNING id, email, first_name, last_name, plan, credits, extra_credits, email_verified
         `,
         [

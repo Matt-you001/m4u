@@ -11,13 +11,18 @@ import {
 import { BannerAd } from "react-native-google-mobile-ads";
 import { useAuth } from "../context/AuthContext";
 import { bannerAdUnitId, defaultBannerSize } from "../utils/admob";
-import { presentSubscriptionPaywall } from "../utils/purchases";
+import {
+  presentSubscriptionPaywall,
+  restoreRevenueCatPurchases,
+} from "../utils/purchases";
 
 export default function UpgradeScreen() {
   const { refreshUser, plan } = useAuth();
   const router = useRouter();
   const [paywallLoading, setPaywallLoading] = useState(false);
+  const [restoreLoading, setRestoreLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [infoMessage, setInfoMessage] = useState("");
 
   const planCopy = {
     free: {
@@ -47,6 +52,7 @@ export default function UpgradeScreen() {
     try {
       setPaywallLoading(true);
       setErrorMessage("");
+      setInfoMessage("");
 
       const didUnlockPlan = await presentSubscriptionPaywall();
       await refreshUser();
@@ -59,6 +65,38 @@ export default function UpgradeScreen() {
       setErrorMessage("Unable to open subscriptions right now. Please try again.");
     } finally {
       setPaywallLoading(false);
+    }
+  };
+
+  const restorePurchases = async () => {
+    try {
+      setRestoreLoading(true);
+      setErrorMessage("");
+      setInfoMessage("");
+
+      const customerInfo = await restoreRevenueCatPurchases();
+      await refreshUser();
+
+      const restoredEntitlements = Object.keys(
+        customerInfo.entitlements.active || {}
+      );
+
+      if (restoredEntitlements.length > 0) {
+        setInfoMessage(
+          "Subscription restored. If your plan does not update immediately, close and reopen the app once."
+        );
+      } else {
+        setInfoMessage(
+          "No active subscription was found for this Google Play account."
+        );
+      }
+    } catch (error) {
+      console.log("restore purchases failed", error);
+      setErrorMessage(
+        "Unable to restore purchases right now. Please try again in a moment."
+      );
+    } finally {
+      setRestoreLoading(false);
     }
   };
 
@@ -88,6 +126,22 @@ export default function UpgradeScreen() {
           )}
         </TouchableOpacity>
 
+        <TouchableOpacity
+          style={[
+            styles.secondaryBtn,
+            restoreLoading && styles.secondaryBtnDisabled,
+          ]}
+          onPress={restorePurchases}
+          disabled={restoreLoading}
+        >
+          {restoreLoading ? (
+            <ActivityIndicator color="#4F46E5" />
+          ) : (
+            <Text style={styles.secondaryText}>Restore purchases</Text>
+          )}
+        </TouchableOpacity>
+
+        {infoMessage ? <Text style={styles.info}>{infoMessage}</Text> : null}
         {errorMessage ? <Text style={styles.error}>{errorMessage}</Text> : null}
       </View>
 
@@ -170,6 +224,30 @@ const styles = StyleSheet.create({
     marginTop: 12,
     color: "#DC2626",
     fontSize: 14,
+  },
+  info: {
+    marginTop: 12,
+    color: "#1D4ED8",
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  secondaryBtn: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: "#C7D2FE",
+    backgroundColor: "#EEF2FF",
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  secondaryBtnDisabled: {
+    opacity: 0.75,
+  },
+  secondaryText: {
+    color: "#4338CA",
+    textAlign: "center",
+    fontWeight: "700",
+    fontSize: 15,
   },
   bannerWrap: {
     marginTop: 24,

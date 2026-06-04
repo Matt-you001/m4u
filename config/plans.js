@@ -3,7 +3,7 @@
 export const PLANS = {
   free: {
     name: 'Free',
-    monthlyCredits: 15,
+    monthlyCredits: 10,
     allowExtraCredits: false,
     historyAccess: false,
     removeAds: false,
@@ -19,7 +19,7 @@ export const PLANS = {
 
   premium: {
     name: 'Premium',
-    monthlyCredits: 100,
+    monthlyCredits: 80,
     allowExtraCredits: true,
     historyAccess: true,
     removeAds: true,

@@ -70,6 +70,7 @@ export default function HomeScreen() {
           onUpgrade={() => router.push('/upgrade')}
           onSettings={() => router.push('/settings')}
           onProfile={() => router.push('/profile')}
+          onDeleteAccount={() => router.push('/delete-account')}
           onLogin={() => router.push('/login')}
           onLogout={logout}
         />

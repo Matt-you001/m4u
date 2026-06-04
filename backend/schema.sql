@@ -34,7 +34,7 @@ CREATE TABLE public.users (
     created_at timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
     preferred_language character varying(50) DEFAULT 'English'::character varying,
     plan character varying(20) DEFAULT 'free'::character varying NOT NULL,
-    credits integer DEFAULT 15 NOT NULL,
+    credits integer DEFAULT 10 NOT NULL,
     extra_credits integer DEFAULT 0 NOT NULL,
     last_credit_reset timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     CONSTRAINT plan_check CHECK (((plan)::text = ANY ((ARRAY['free'::character varying, 'basic'::character varying, 'premium'::character varying])::text[])))

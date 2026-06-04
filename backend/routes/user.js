@@ -6,9 +6,9 @@ import { authenticateUser } from "../middleware/auth.js";
 const router = express.Router();
 
 const PLAN_LIMITS = {
-  free: 15,
+  free: 10,
   basic: 50,
-  premium: 100,
+  premium: 80,
 };
 
 /**
@@ -75,7 +75,7 @@ router.get("/me", authenticateUser, async (req, res) => {
     }
 
     const user = rows[0];
-    const baseCredits = PLAN_LIMITS[user.plan] || 15;
+    const baseCredits = PLAN_LIMITS[user.plan] || 10;
     const usedCredits = Math.max(baseCredits - user.credits, 0);
 
     res.json({
@@ -133,7 +133,7 @@ router.patch("/profile", authenticateUser, async (req, res) => {
     );
 
     const user = rows[0];
-    const baseCredits = PLAN_LIMITS[user.plan] || 15;
+    const baseCredits = PLAN_LIMITS[user.plan] || 10;
     const usedCredits = Math.max(baseCredits - user.credits, 0);
 
     res.json({
@@ -222,6 +222,70 @@ router.post("/change-password", authenticateUser, async (req, res) => {
   } catch (err) {
     console.error("Change password error:", err);
     res.status(500).json({ message: "Failed to change password" });
+  }
+});
+
+/**
+ * POST /user/delete-account
+ * Body: { currentPassword, confirmationText }
+ */
+router.post("/delete-account", authenticateUser, async (req, res) => {
+  const client = await pool.connect();
+  let transactionStarted = false;
+
+  try {
+    const userId = req.user.id;
+    const { currentPassword, confirmationText } = req.body;
+
+    if (!currentPassword?.trim()) {
+      return res.status(400).json({
+        message: "Current password is required to delete your account",
+      });
+    }
+
+    if (confirmationText?.trim().toUpperCase() !== "DELETE") {
+      return res.status(400).json({
+        message: 'Type DELETE to confirm account deletion',
+      });
+    }
+
+    const result = await client.query(
+      `
+      SELECT password_hash
+      FROM users
+      WHERE id = $1
+      `,
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const user = result.rows[0];
+    const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
+
+    if (!isMatch) {
+      return res.status(401).json({ message: "Current password is incorrect" });
+    }
+
+    await client.query("BEGIN");
+    transactionStarted = true;
+    await client.query(`DELETE FROM users WHERE id = $1`, [userId]);
+    await client.query("COMMIT");
+    transactionStarted = false;
+
+    res.json({
+      message: "Your Message4U account has been deleted successfully",
+    });
+  } catch (err) {
+    if (transactionStarted) {
+      await client.query("ROLLBACK");
+    }
+    console.error("Delete account error:", err);
+    res.status(500).json({ message: "Failed to delete account" });
+  } finally {
+    client.release();
   }
 });
 

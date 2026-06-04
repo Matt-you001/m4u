@@ -250,6 +250,21 @@ export default function ProfilePage() {
             </Text>
           </Pressable>
         </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Delete Account</Text>
+          <Text style={styles.deleteCopy}>
+            You can now permanently delete your Message4U account directly
+            inside the app. This removes your account access and associated app
+            data.
+          </Text>
+          <Pressable
+            style={styles.dangerButton}
+            onPress={() => router.push("/delete-account")}
+          >
+            <Text style={styles.dangerButtonText}>Manage Account Deletion</Text>
+          </Pressable>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -348,6 +363,25 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: "#fff",
+    fontWeight: "700",
+    fontSize: 15,
+  },
+  deleteCopy: {
+    fontSize: 14,
+    color: "#4B5563",
+    marginBottom: 14,
+    lineHeight: 21,
+  },
+  dangerButton: {
+    backgroundColor: "#FFFFFF",
+    padding: 14,
+    borderRadius: 10,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+  },
+  dangerButtonText: {
+    color: "#B91C1C",
     fontWeight: "700",
     fontSize: 15,
   },

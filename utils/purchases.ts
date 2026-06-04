@@ -23,6 +23,24 @@ const FALLBACK_CONFIG: RevenueCatConfig = {
 
 let isPurchasesConfigured = false;
 
+async function syncRevenueCatPurchases(reason: string) {
+  try {
+    await Purchases.syncPurchases();
+    const customerInfo = await Purchases.getCustomerInfo();
+
+    console.log("RevenueCat purchases synced:", reason, {
+      originalAppUserId: customerInfo.originalAppUserId,
+      activeSubscriptions: customerInfo.activeSubscriptions,
+      activeEntitlements: Object.keys(customerInfo.entitlements.active || {}),
+    });
+
+    return customerInfo;
+  } catch (e) {
+    console.log(`RevenueCat sync error (${reason}):`, e);
+    return null;
+  }
+}
+
 function getRevenueCatConfig(): RevenueCatConfig {
   const extra = Constants.expoConfig?.extra as
     | {
@@ -117,8 +135,23 @@ export async function initPurchases(userId: string) {
 
     await Purchases.logIn(String(userId));
     console.log("RevenueCat login:", userId);
+
+    await syncRevenueCatPurchases("post-login");
   } catch (e) {
     console.log("RevenueCat login error:", e);
+  }
+}
+
+export async function logoutPurchases() {
+  try {
+    if (!isPurchasesConfigured) {
+      return;
+    }
+
+    await Purchases.logOut();
+    console.log("RevenueCat logout complete");
+  } catch (e) {
+    console.log("RevenueCat logout error:", e);
   }
 }
 
@@ -140,11 +173,36 @@ export async function presentSubscriptionPaywall() {
   switch (paywallResult) {
     case PAYWALL_RESULT.PURCHASED:
     case PAYWALL_RESULT.RESTORED:
+      await syncRevenueCatPurchases(
+        paywallResult === PAYWALL_RESULT.PURCHASED
+          ? "post-paywall-purchase"
+          : "post-paywall-restore"
+      );
       return true;
     case PAYWALL_RESULT.NOT_PRESENTED:
     case PAYWALL_RESULT.ERROR:
     case PAYWALL_RESULT.CANCELLED:
     default:
       return false;
+  }
+}
+
+export async function restoreRevenueCatPurchases() {
+  await configurePurchases();
+
+  try {
+    const customerInfo = await Purchases.restorePurchases();
+
+    console.log("RevenueCat restore completed:", {
+      originalAppUserId: customerInfo.originalAppUserId,
+      activeSubscriptions: customerInfo.activeSubscriptions,
+      activeEntitlements: Object.keys(customerInfo.entitlements.active || {}),
+    });
+
+    await syncRevenueCatPurchases("post-restore-purchases");
+    return customerInfo;
+  } catch (e) {
+    console.log("RevenueCat restore error:", e);
+    throw e;
   }
 }

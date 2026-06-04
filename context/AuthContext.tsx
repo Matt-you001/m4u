@@ -10,8 +10,13 @@ import {
 } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { setAuthStore } from "../store/authStore";
+import { clearHistory } from "../utils/history";
 import api from "../utils/api";
-import { configurePurchases, initPurchases } from "../utils/purchases";
+import {
+  configurePurchases,
+  initPurchases,
+  logoutPurchases,
+} from "../utils/purchases";
 
 type Plan = "free" | "basic" | "premium";
 
@@ -45,6 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const clearSession = useCallback(async () => {
     await AsyncStorage.removeItem("token");
     delete api.defaults.headers.common.Authorization;
+    await logoutPurchases();
 
     setToken(null);
     setPlan("free");
@@ -145,6 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
+    await clearHistory();
     await clearSession();
     router.replace("/signup");
   };
