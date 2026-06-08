@@ -1,5 +1,6 @@
 import api from "@/utils/api";
 import { Ionicons } from "@expo/vector-icons";
+import BrandedBackdrop from "../components/BrandedBackdrop";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -26,6 +27,8 @@ type UserProfile = {
   totalCredits: number;
   baseCredits: number;
   usedCredits: number;
+  referralCode?: string;
+  successfulReferrals?: number;
 };
 
 export default function ProfilePage() {
@@ -131,6 +134,7 @@ export default function ProfilePage() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 40 : 20}
     >
+      <BrandedBackdrop light />
       <ScrollView
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
@@ -153,6 +157,7 @@ export default function ProfilePage() {
 
           <TextInput
             placeholder="First Name"
+            placeholderTextColor="#9CA3AF"
             style={styles.input}
             value={firstName}
             onChangeText={setFirstName}
@@ -160,6 +165,7 @@ export default function ProfilePage() {
 
           <TextInput
             placeholder="Last Name"
+            placeholderTextColor="#9CA3AF"
             style={styles.input}
             value={lastName}
             onChangeText={setLastName}
@@ -187,6 +193,12 @@ export default function ProfilePage() {
           <Text style={styles.infoText}>Used Credits: {profile?.usedCredits}</Text>
           <Text style={styles.infoText}>Bonus Credits: {profile?.extraCredits}</Text>
           <Text style={styles.infoText}>Available Credits: {profile?.totalCredits}</Text>
+          <Text style={styles.infoText}>
+            Referral Code: {profile?.referralCode || "Loading..."}
+          </Text>
+          <Text style={styles.infoText}>
+            Successful Referrals: {profile?.successfulReferrals || 0}
+          </Text>
         </View>
 
         <View style={styles.card}>
@@ -195,6 +207,7 @@ export default function ProfilePage() {
           <View style={styles.passwordWrapper}>
             <TextInput
               placeholder="Current Password"
+              placeholderTextColor="#9CA3AF"
               secureTextEntry={!showCurrentPassword}
               style={[styles.input, styles.passwordInput]}
               value={currentPassword}
@@ -215,6 +228,7 @@ export default function ProfilePage() {
           <View style={styles.passwordWrapper}>
             <TextInput
               placeholder="New Password"
+              placeholderTextColor="#9CA3AF"
               secureTextEntry={!showNewPassword}
               style={[styles.input, styles.passwordInput]}
               value={newPassword}
@@ -273,7 +287,7 @@ export default function ProfilePage() {
 const styles = StyleSheet.create({
   wrapper: {
     flex: 1,
-    backgroundColor: "#F9FAFB",
+    backgroundColor: "#F4F7FF",
   },
   container: {
     padding: 16,
@@ -295,18 +309,22 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   title: {
-    fontSize: 24,
-    fontWeight: "700",
+    fontSize: 28,
+    fontWeight: "800",
     color: "#4F46E5",
     marginBottom: 16,
   },
   card: {
-    backgroundColor: "#fff",
-    padding: 16,
-    borderRadius: 14,
+    backgroundColor: "rgba(255,255,255,0.88)",
+    padding: 18,
+    borderRadius: 22,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: "rgba(199, 210, 254, 0.9)",
+    shadowColor: "#312E81",
+    shadowOpacity: 0.05,
+    shadowRadius: 14,
+    elevation: 3,
   },
   sectionTitle: {
     fontSize: 18,
@@ -327,10 +345,11 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: "#D1D5DB",
-    borderRadius: 10,
+    borderRadius: 12,
     padding: 12,
     backgroundColor: "#fff",
     marginBottom: 12,
+    color: "#111827",
   },
   passwordWrapper: {
     position: "relative",
@@ -357,7 +376,7 @@ const styles = StyleSheet.create({
   primaryButton: {
     backgroundColor: "#4F46E5",
     padding: 14,
-    borderRadius: 10,
+    borderRadius: 12,
     alignItems: "center",
     marginTop: 4,
   },
@@ -375,7 +394,7 @@ const styles = StyleSheet.create({
   dangerButton: {
     backgroundColor: "#FFFFFF",
     padding: 14,
-    borderRadius: 10,
+    borderRadius: 12,
     alignItems: "center",
     borderWidth: 1,
     borderColor: "#FCA5A5",

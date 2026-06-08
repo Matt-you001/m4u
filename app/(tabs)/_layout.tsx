@@ -6,7 +6,23 @@ export default function TabLayout() {
   const { plan } = useAuth();
 
   return (
-    <Tabs screenOptions={{ headerShown: false }}>
+    <Tabs
+      screenOptions={{
+        headerShown: false,
+        tabBarActiveTintColor: "#4F46E5",
+        tabBarInactiveTintColor: "#6B7280",
+        tabBarStyle: {
+          backgroundColor: "rgba(255,255,255,0.95)",
+          borderTopColor: "#E0E7FF",
+          height: 64,
+          paddingTop: 6,
+          paddingBottom: 8,
+        },
+        sceneStyle: {
+          backgroundColor: "#F4F7FF",
+        },
+      }}
+    >
       <Tabs.Screen
         name="index"
         options={{

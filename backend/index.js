@@ -5,6 +5,7 @@ import express from "express";
 import jwt from "jsonwebtoken";
 import { ensureAuthSchema, pool } from "./db.js";
 import {
+  sendFeedbackEmail,
   sendPasswordResetCodeEmail,
   sendVerificationCodeEmail,
 } from "./lib/mailer.js";
@@ -87,6 +88,73 @@ function getRevenueCatWebhookConfig() {
     premiumEntitlementId:
       process.env.REVENUECAT_PREMIUM_ENTITLEMENT_ID || "entl459591f140",
   };
+}
+
+function normalizeReferralCode(value) {
+  return String(value || "").trim().toUpperCase().replace(/\s+/g, "");
+}
+
+async function findReferrerByCode(client, referralCode) {
+  const normalizedCode = normalizeReferralCode(referralCode);
+
+  if (!normalizedCode) {
+    return null;
+  }
+
+  const result = await client.query(
+    `
+    SELECT id, referral_code
+    FROM users
+    WHERE UPPER(referral_code) = $1
+    LIMIT 1
+    `,
+    [normalizedCode]
+  );
+
+  return result.rows[0] || null;
+}
+
+async function ensureUserReferralCode(client, userId) {
+  await client.query(
+    `
+    UPDATE users
+    SET referral_code = CONCAT('M4U', id)
+    WHERE id = $1
+      AND (referral_code IS NULL OR TRIM(referral_code) = '')
+    `,
+    [userId]
+  );
+}
+
+async function awardReferralCreditIfEligible(client, invitedUserId) {
+  const markResult = await client.query(
+    `
+    UPDATE users
+    SET referral_rewarded_at = NOW()
+    WHERE id = $1
+      AND referred_by_user_id IS NOT NULL
+      AND referral_rewarded_at IS NULL
+    RETURNING referred_by_user_id
+    `,
+    [invitedUserId]
+  );
+
+  if (!markResult.rows.length) {
+    return { awarded: false };
+  }
+
+  const referrerId = markResult.rows[0].referred_by_user_id;
+
+  await client.query(
+    `
+    UPDATE users
+    SET extra_credits = extra_credits + 1
+    WHERE id = $1
+    `,
+    [referrerId]
+  );
+
+  return { awarded: true, referrerId };
 }
 
 function extractCandidateUserIdsFromRevenueCatEvent(event) {
@@ -259,7 +327,8 @@ app.post("/auth/signup", async (req, res) => {
   const client = await pool.connect();
 
   try {
-    const { firstName, lastName, phoneNumber, email, password } = req.body;
+    const { firstName, lastName, phoneNumber, email, password, referralCode } =
+      req.body;
 
     if (
       !firstName?.trim() ||
@@ -279,12 +348,28 @@ app.post("/auth/signup", async (req, res) => {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
+    const normalizedReferralCode = normalizeReferralCode(referralCode);
     const passwordHash = await bcrypt.hash(password, 10);
     const verificationCode = generateOtpCode();
     const verificationCodeHash = hashOtpCode(verificationCode);
     const verificationExpires = getOtpExpiryDate();
 
     await client.query("BEGIN");
+
+    let referredByUserId = null;
+
+    if (normalizedReferralCode) {
+      const referrer = await findReferrerByCode(client, normalizedReferralCode);
+
+      if (!referrer) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({
+          message: "Referral code is invalid",
+        });
+      }
+
+      referredByUserId = referrer.id;
+    }
 
     const existingUser = await client.query(
       "SELECT id, email_verified FROM users WHERE email = $1",
@@ -293,6 +378,13 @@ app.post("/auth/signup", async (req, res) => {
 
     if (existingUser.rows.length > 0) {
       const existing = existingUser.rows[0];
+
+      if (referredByUserId && Number(referredByUserId) === Number(existing.id)) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({
+          message: "You cannot use your own referral code",
+        });
+      }
 
       if (!existing.email_verified) {
         await client.query(
@@ -306,8 +398,9 @@ app.post("/auth/signup", async (req, res) => {
             email_verification_code_hash = $5,
             email_verification_expires = $6,
             email_verification_attempts = 0,
-            email_verification_last_sent_at = NOW()
-          WHERE email = $7
+            email_verification_last_sent_at = NOW(),
+            referred_by_user_id = COALESCE($7, referred_by_user_id)
+          WHERE email = $8
           `,
           [
             firstName.trim(),
@@ -316,6 +409,7 @@ app.post("/auth/signup", async (req, res) => {
             passwordHash,
             verificationCodeHash,
             verificationExpires,
+            referredByUserId,
             normalizedEmail,
           ]
         );
@@ -337,7 +431,7 @@ app.post("/auth/signup", async (req, res) => {
       });
     }
 
-    await client.query(
+    const insertedUser = await client.query(
       `
       INSERT INTO users (
         first_name,
@@ -348,13 +442,15 @@ app.post("/auth/signup", async (req, res) => {
         plan,
         credits,
         extra_credits,
+        referred_by_user_id,
         email_verified,
         email_verification_code_hash,
         email_verification_expires,
         email_verification_attempts,
         email_verification_last_sent_at
       )
-      VALUES ($1, $2, $3, $4, $5, 'free', 10, 0, false, $6, $7, 0, NOW())
+      VALUES ($1, $2, $3, $4, $5, 'free', 10, 0, $6, false, $7, $8, 0, NOW())
+      RETURNING id
       `,
       [
         firstName.trim(),
@@ -362,10 +458,13 @@ app.post("/auth/signup", async (req, res) => {
         phoneNumber.trim(),
         normalizedEmail,
         passwordHash,
+        referredByUserId,
         verificationCodeHash,
         verificationExpires,
       ]
     );
+
+    await ensureUserReferralCode(client, insertedUser.rows[0].id);
 
     await sendVerificationCodeEmail(normalizedEmail, verificationCode);
 
@@ -394,6 +493,8 @@ app.get("/auth/verify-email", async (_req, res) => {
 });
 
 app.post("/auth/verify-email-otp", async (req, res) => {
+  const client = await pool.connect();
+
   try {
     const { email, code } = req.body;
 
@@ -402,11 +503,15 @@ app.post("/auth/verify-email-otp", async (req, res) => {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-    const result = await pool.query(
+    await client.query("BEGIN");
+
+    const result = await client.query(
       `
       SELECT
         id,
         email_verified,
+        referred_by_user_id,
+        referral_rewarded_at,
         email_verification_code_hash,
         email_verification_expires,
         email_verification_attempts
@@ -417,12 +522,14 @@ app.post("/auth/verify-email-otp", async (req, res) => {
     );
 
     if (result.rows.length === 0) {
+      await client.query("ROLLBACK");
       return res.status(400).json({ message: "Invalid email or verification code" });
     }
 
     const user = result.rows[0];
 
     if (user.email_verified) {
+      await client.query("ROLLBACK");
       return res.json({ message: "Email already verified. You can now log in." });
     }
 
@@ -431,10 +538,12 @@ app.post("/auth/verify-email-otp", async (req, res) => {
       !user.email_verification_expires ||
       new Date(user.email_verification_expires).getTime() < Date.now()
     ) {
+      await client.query("ROLLBACK");
       return res.status(400).json({ message: "Verification code is invalid or expired" });
     }
 
     if ((user.email_verification_attempts || 0) >= OTP_MAX_ATTEMPTS) {
+      await client.query("ROLLBACK");
       return res.status(400).json({
         message: "Too many failed attempts. Please request a new verification code.",
       });
@@ -443,7 +552,7 @@ app.post("/auth/verify-email-otp", async (req, res) => {
     if (hashOtpCode(code.trim()) !== user.email_verification_code_hash) {
       const attempts = (user.email_verification_attempts || 0) + 1;
 
-      await pool.query(
+      await client.query(
         `
         UPDATE users
         SET
@@ -461,6 +570,7 @@ app.post("/auth/verify-email-otp", async (req, res) => {
         [attempts, OTP_MAX_ATTEMPTS, user.id]
       );
 
+      await client.query("COMMIT");
       return res.status(400).json({
         message:
           attempts >= OTP_MAX_ATTEMPTS
@@ -469,7 +579,7 @@ app.post("/auth/verify-email-otp", async (req, res) => {
       });
     }
 
-    await pool.query(
+    await client.query(
       `
       UPDATE users
       SET
@@ -482,10 +592,19 @@ app.post("/auth/verify-email-otp", async (req, res) => {
       [user.id]
     );
 
+    await awardReferralCreditIfEligible(client, user.id);
+
+    await client.query("COMMIT");
+
     res.json({ message: "Email verified successfully. You can now log in." });
   } catch (err) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {}
     console.error("Email verification error:", err);
     res.status(500).json({ message: "Internal server error" });
+  } finally {
+    client.release();
   }
 });
 
@@ -813,6 +932,52 @@ app.post("/ads/reward", authenticateUser, async (req, res) => {
   } catch (err) {
     console.error("Ad reward error:", err);
     res.status(500).json({ error: "Failed to add ad credit" });
+  }
+});
+
+app.post("/feedback", authenticateUser, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { message, category } = req.body;
+
+    if (!message?.trim() || message.trim().length < 10) {
+      return res.status(400).json({
+        error: "Please enter at least a short feedback message",
+      });
+    }
+
+    const result = await pool.query(
+      `
+      SELECT first_name, last_name, email, plan
+      FROM users
+      WHERE id = $1
+      `,
+      [userId]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const user = result.rows[0];
+    const fullName = [user.first_name, user.last_name].filter(Boolean).join(" ").trim();
+
+    await sendFeedbackEmail({
+      userId,
+      name: fullName,
+      email: user.email,
+      plan: user.plan,
+      category: category?.trim() || "General",
+      message: message.trim(),
+    });
+
+    res.json({
+      success: true,
+      message: "Thanks for your feedback. We really appreciate it.",
+    });
+  } catch (err) {
+    console.error("Feedback submission error:", err);
+    res.status(500).json({ error: "Failed to send feedback right now" });
   }
 });
 

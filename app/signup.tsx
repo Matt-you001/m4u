@@ -28,6 +28,7 @@ export default function Signup() {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [referralCode, setReferralCode] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
   const [loading, setLoading] = useState(false);
@@ -79,6 +80,7 @@ export default function Signup() {
         phoneNumber: `${countryCode}${phoneNumber}`,
         email: email.toLowerCase(),
         password,
+        referralCode: referralCode.trim(),
       });
 
       router.push({
@@ -181,6 +183,13 @@ export default function Signup() {
               value={email}
               setValue={setEmail}
               keyboardType="email-address"
+            />
+
+            <FloatingInput
+              label="Referral Code (Optional)"
+              value={referralCode}
+              setValue={setReferralCode}
+              autoCapitalize="characters"
             />
 
             <Text style={styles.label}>Password</Text>

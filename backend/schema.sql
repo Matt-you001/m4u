@@ -37,6 +37,9 @@ CREATE TABLE public.users (
     credits integer DEFAULT 10 NOT NULL,
     extra_credits integer DEFAULT 0 NOT NULL,
     last_credit_reset timestamp without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    referral_code text,
+    referred_by_user_id integer,
+    referral_rewarded_at timestamp with time zone,
     CONSTRAINT plan_check CHECK (((plan)::text = ANY ((ARRAY['free'::character varying, 'basic'::character varying, 'premium'::character varying])::text[])))
 );
 
@@ -82,6 +85,13 @@ ALTER TABLE ONLY public.users
 
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: users_referral_code_unique_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX users_referral_code_unique_idx ON public.users USING btree (referral_code) WHERE (referral_code IS NOT NULL);
 
 
 --

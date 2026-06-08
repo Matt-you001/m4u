@@ -1,4 +1,5 @@
 import UpgradeModal from '@/components/UpgradeModal';
+import BrandedBackdrop from '@/components/BrandedBackdrop';
 import { useAuth } from '@/context/AuthContext';
 import {
   bannerAdUnitId,
@@ -231,8 +232,10 @@ export default function RespondMessage() {
 
   return (
     <>
-      <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.title}>Respond to a Message</Text>
+      <View style={styles.screen}>
+        <BrandedBackdrop light />
+        <ScrollView contentContainerStyle={styles.container}>
+          <Text style={styles.title}>Respond to a Message</Text>
 
         <TextInput
           placeholder="Paste message"
@@ -346,16 +349,17 @@ export default function RespondMessage() {
           </View>
         )}
 
-        {plan === 'free' && (
-          <View style={styles.bannerWrap}>
-            <BannerAd
-              unitId={bannerAdUnitId}
-              size={defaultBannerSize}
-              requestOptions={{ requestNonPersonalizedAdsOnly: true }}
-            />
-          </View>
-        )}
-      </ScrollView>
+          {plan === 'free' && (
+            <View style={styles.bannerWrap}>
+              <BannerAd
+                unitId={bannerAdUnitId}
+                size={defaultBannerSize}
+                requestOptions={{ requestNonPersonalizedAdsOnly: true }}
+              />
+            </View>
+          )}
+        </ScrollView>
+      </View>
 
       <UpgradeModal 
           visible={showUpgrade}
@@ -369,7 +373,11 @@ export default function RespondMessage() {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20, backgroundColor: '#F9FAFB' },
+  screen: {
+    flex: 1,
+    backgroundColor: '#F4F7FF',
+  },
+  container: { padding: 20, backgroundColor: 'transparent', paddingBottom: 36 },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
@@ -401,13 +409,20 @@ const styles = StyleSheet.create({
   iconBox: { alignItems: 'center' },
   iconButton: { color: '#4F46E5' },
   primaryText: { color: '#000', fontWeight: 'bold', fontSize: 16 },
-  resultCard: { backgroundColor: '#ECFEFF', padding: 14, borderRadius: 10, marginTop: 12 },
+  resultCard: {
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    padding: 16,
+    borderRadius: 18,
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(191, 219, 254, 0.9)',
+  },
   bannerWrap: {
     marginTop: 18,
     marginBottom: 10,
     alignItems: 'center',
   },
-  resultText: { fontSize: 16 },
+  resultText: { fontSize: 16, lineHeight: 24, color: '#111827' },
   errorText: {
     color: 'red',
     textAlign: 'center',

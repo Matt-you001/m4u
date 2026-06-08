@@ -8,7 +8,7 @@ import {
   useEffect,
   useState,
 } from "react";
-import { ActivityIndicator, View } from "react-native";
+import BrandedLoader from "../components/BrandedLoader";
 import { setAuthStore } from "../store/authStore";
 import { clearHistory } from "../utils/history";
 import api from "../utils/api";
@@ -161,11 +161,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   if (loading) {
-    return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator size="large" />
-      </View>
-    );
+    return <BrandedLoader />;
   }
 
   return (

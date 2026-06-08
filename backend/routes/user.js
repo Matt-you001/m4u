@@ -63,7 +63,14 @@ router.get("/me", authenticateUser, async (req, res) => {
         email,
         plan,
         credits,
-        extra_credits
+        extra_credits,
+        referral_code,
+        COALESCE((
+          SELECT COUNT(*)::int
+          FROM users referrals
+          WHERE referrals.referred_by_user_id = users.id
+            AND referrals.referral_rewarded_at IS NOT NULL
+        ), 0) AS successful_referrals
       FROM users
       WHERE id = $1
       `,
@@ -90,6 +97,8 @@ router.get("/me", authenticateUser, async (req, res) => {
       totalCredits: user.credits + user.extra_credits,
       baseCredits,
       usedCredits,
+      referralCode: user.referral_code || `M4U${user.id}`,
+      successfulReferrals: Number(user.successful_referrals) || 0,
     });
   } catch (err) {
     console.error("ME endpoint error:", err);

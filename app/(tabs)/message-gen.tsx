@@ -1,4 +1,5 @@
 import UpgradeModal from '@/components/UpgradeModal';
+import BrandedBackdrop from '@/components/BrandedBackdrop';
 import { useAuth } from '@/context/AuthContext';
 import {
   bannerAdUnitId,
@@ -489,11 +490,13 @@ export default function GenerateScreen() {
 
   return (
     <>
-      <ScrollView
-        contentContainerStyle={styles.container}
-        keyboardShouldPersistTaps="handled"
-      >
-        <Text style={styles.title}>Message Generator</Text>
+      <View style={styles.screen}>
+        <BrandedBackdrop light />
+        <ScrollView
+          contentContainerStyle={styles.container}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Text style={styles.title}>Message Generator</Text>
 
         <View style={styles.modeSwitch}>
           <TouchableOpacity
@@ -945,19 +948,20 @@ export default function GenerateScreen() {
           </Text>
         </TouchableOpacity>
 
-        {!!result && (
-          <View style={styles.resultCard}>
-            <Text style={styles.resultText}>{result}</Text>
-            <MessageActions
-              text={result}
-              variant={mode === 'corporate' ? 'corporate' : 'individual'}
-              preferredPlatform={
-                mode === 'corporate' ? finalBusinessPlatform : undefined
-              }
-            />
-          </View>
-        )}
-      </ScrollView>
+          {!!result && (
+            <View style={styles.resultCard}>
+              <Text style={styles.resultText}>{result}</Text>
+              <MessageActions
+                text={result}
+                variant={mode === 'corporate' ? 'corporate' : 'individual'}
+                preferredPlatform={
+                  mode === 'corporate' ? finalBusinessPlatform : undefined
+                }
+              />
+            </View>
+          )}
+        </ScrollView>
+      </View>
 
       <UpgradeModal
         visible={showUpgrade}
@@ -971,7 +975,11 @@ export default function GenerateScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20, backgroundColor: '#F9FAFB' },
+  screen: {
+    flex: 1,
+    backgroundColor: '#F4F7FF',
+  },
+  container: { padding: 20, backgroundColor: 'transparent', paddingBottom: 36 },
   bannerWrap: {
     marginBottom: 14,
     alignItems: 'center',
@@ -1168,12 +1176,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   resultCard: {
-    backgroundColor: '#ECFEFF',
-    padding: 14,
-    borderRadius: 10,
-    marginTop: 12,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    padding: 16,
+    borderRadius: 18,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(191, 219, 254, 0.9)',
   },
-  resultText: { fontSize: 16 },
+  resultText: { fontSize: 16, lineHeight: 24, color: '#111827' },
   errorText: {
     color: 'red',
     textAlign: 'center',

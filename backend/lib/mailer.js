@@ -58,3 +58,43 @@ export async function sendPasswordResetCodeEmail(email, code) {
     `,
   });
 }
+
+export async function sendFeedbackEmail({
+  userId,
+  name,
+  email,
+  plan,
+  category,
+  message,
+}) {
+  assertMailerConfig();
+
+  const fromEmail =
+    process.env.EMAIL_FROM ||
+    "m4U <no-reply@notifications.techsolutionproviders.net>";
+  const feedbackRecipient =
+    process.env.FEEDBACK_EMAIL_TO || "contact@techsolutionproviders.net";
+
+  const { error } = await resend.emails.send({
+    from: fromEmail,
+    to: [feedbackRecipient],
+    replyTo: email,
+    subject: `m4U Feedback${category ? `: ${category}` : ""}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111827;">
+        <h2>New m4U feedback received</h2>
+        <p><strong>User ID:</strong> ${userId}</p>
+        <p><strong>Name:</strong> ${name || "Not provided"}</p>
+        <p><strong>Email:</strong> ${email}</p>
+        <p><strong>Plan:</strong> ${plan}</p>
+        <p><strong>Category:</strong> ${category || "General"}</p>
+        <hr style="margin: 20px 0; border: none; border-top: 1px solid #E5E7EB;" />
+        <p style="white-space: pre-wrap;">${String(message || "").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>
+      </div>
+    `,
+  });
+
+  if (error) {
+    throw new Error(error.message || "Failed to send feedback email");
+  }
+}
