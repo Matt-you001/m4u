@@ -10,7 +10,12 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.mattonah.message4u",
-      "buildNumber": "1"
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSSpeechRecognitionUsageDescription": "Allow Message4u to turn your voice prompt into text.",
+        "NSMicrophoneUsageDescription": "Allow Message4u to use your microphone for voice prompts.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "googleServicesFile": "./google-services.json",
@@ -21,7 +26,10 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "output": "static",
@@ -33,7 +41,7 @@
       [
         "react-native-google-mobile-ads",
         {
-          "androidAppId": "ca-app-pub-3940256099942544~3347511713",
+          "androidAppId": "ca-app-pub-8208154537756936~9573605827",
           "iosAppId": "ca-app-pub-3940256099942544~1458002511"
         }
       ],
@@ -73,11 +81,11 @@
         "offeringIdentifier": "default"
       },
       "admob": {
-        "androidBannerAdUnitId": "ca-app-pub-3940256099942544/9214589741",
+        "androidBannerAdUnitId": "ca-app-pub-8208154537756936/1261241232",
         "iosBannerAdUnitId": "ca-app-pub-3940256099942544/2435281174",
-        "androidInterstitialAdUnitId": "ca-app-pub-3940256099942544/1033173712",
+        "androidInterstitialAdUnitId": "ca-app-pub-8208154537756936/4426797335",
         "iosInterstitialAdUnitId": "ca-app-pub-3940256099942544/4411468910",
-        "androidRewardedAdUnitId": "ca-app-pub-3940256099942544/5224354917",
+        "androidRewardedAdUnitId": "ca-app-pub-8208154537756936/6861388989",
         "iosRewardedAdUnitId": "ca-app-pub-3940256099942544/1712485313"
       },
       "eas": {

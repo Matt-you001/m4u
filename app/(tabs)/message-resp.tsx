@@ -12,7 +12,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { IconButton } from 'react-native-paper';
 import { BannerAd } from 'react-native-google-mobile-ads';
 import MessageActions from '../../components/MessageActions';
@@ -235,6 +243,14 @@ export default function RespondMessage() {
       <View style={styles.screen}>
         <BrandedBackdrop light />
         <ScrollView contentContainerStyle={styles.container}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={20} color="#4F46E5" />
+            <Text style={styles.backText}>Back</Text>
+          </TouchableOpacity>
+
           <Text style={styles.title}>Respond to a Message</Text>
 
         <TextInput
@@ -378,12 +394,25 @@ const styles = StyleSheet.create({
     backgroundColor: '#F4F7FF',
   },
   container: { padding: 20, backgroundColor: 'transparent', paddingBottom: 36 },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 16,
+    marginBottom: 10,
+  },
+  backText: {
+    color: '#4F46E5',
+    fontWeight: '700',
+    fontSize: 16,
+  },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     textAlign: 'center',
     color: '#4F46E5',
-    marginVertical: 20,
+    marginTop: 0,
+    marginBottom: 20,
   },
   label: { fontWeight: '600', marginBottom: 6, color: '#374151' },
   pickerBox: {

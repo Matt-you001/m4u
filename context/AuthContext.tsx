@@ -8,6 +8,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { AppState } from "react-native";
 import BrandedLoader from "../components/BrandedLoader";
 import { setAuthStore } from "../store/authStore";
 import { clearHistory } from "../utils/history";
@@ -16,6 +17,7 @@ import {
   configurePurchases,
   initPurchases,
   logoutPurchases,
+  refreshRevenueCatSubscriptionState,
 } from "../utils/purchases";
 
 type Plan = "free" | "basic" | "premium";
@@ -82,7 +84,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       return res.data;
     } catch (err: any) {
-      if (err?.response?.status === 401) {
+      const errorCode = String(err?.response?.data?.code || "").trim();
+
+      if (
+        err?.response?.status === 401 &&
+        (errorCode === "TOKEN_EXPIRED" || errorCode === "INVALID_TOKEN")
+      ) {
         await clearSession();
       }
 
@@ -105,6 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (user?.id) {
           await initPurchases(String(user.id));
+          await refreshUser();
         }
       }
 
@@ -113,6 +121,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     bootstrap();
   }, [refreshUser]);
+
+  useEffect(() => {
+    if (!token) {
+      return;
+    }
+
+    const subscription = AppState.addEventListener("change", async (state) => {
+      if (state !== "active") {
+        return;
+      }
+
+      try {
+        await refreshRevenueCatSubscriptionState("app-resume");
+        await refreshUser();
+      } catch (error) {
+        console.log("resume subscription sync failed", error);
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [token, refreshUser]);
 
   useEffect(() => {
     setAuthStore({ refreshUser, clearSession });

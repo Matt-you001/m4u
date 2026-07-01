@@ -2,6 +2,7 @@ import Constants from "expo-constants";
 import { Platform } from "react-native";
 import Purchases, { LOG_LEVEL } from "react-native-purchases";
 import RevenueCatUI, { PAYWALL_RESULT } from "react-native-purchases-ui";
+import api from "./api";
 
 type RevenueCatConfig = {
   testApiKey?: string;
@@ -37,6 +38,37 @@ async function syncRevenueCatPurchases(reason: string) {
     return customerInfo;
   } catch (e) {
     console.log(`RevenueCat sync error (${reason}):`, e);
+    return null;
+  }
+}
+
+async function syncRevenueCatSubscriptionToBackend(reason: string) {
+  const customerInfo = await syncRevenueCatPurchases(reason);
+
+  if (!customerInfo) {
+    return null;
+  }
+
+  try {
+    const entitlementIds = Object.keys(customerInfo.entitlements.active || {});
+    const productIds = Array.from(customerInfo.activeSubscriptions || []);
+
+    const response = await api.post("/user/sync-subscription", {
+      entitlementIds,
+      productIds,
+      originalAppUserId: customerInfo.originalAppUserId,
+    });
+
+    console.log("RevenueCat subscription synced to backend:", reason, {
+      plan: response.data?.plan,
+      totalCredits: response.data?.totalCredits,
+      entitlementIds,
+      productIds,
+    });
+
+    return response.data;
+  } catch (error) {
+    console.log(`RevenueCat backend sync error (${reason}):`, error);
     return null;
   }
 }
@@ -141,7 +173,7 @@ export async function initPurchases(userId: string) {
     await Purchases.logIn(String(userId));
     console.log("RevenueCat login:", userId);
 
-    await syncRevenueCatPurchases("post-login");
+    await syncRevenueCatSubscriptionToBackend("post-login");
   } catch (e) {
     console.log("RevenueCat login error:", e);
   }
@@ -199,7 +231,7 @@ export async function presentSubscriptionPaywall() {
   switch (paywallResult) {
     case PAYWALL_RESULT.PURCHASED:
     case PAYWALL_RESULT.RESTORED:
-      await syncRevenueCatPurchases(
+      await syncRevenueCatSubscriptionToBackend(
         paywallResult === PAYWALL_RESULT.PURCHASED
           ? "post-paywall-purchase"
           : "post-paywall-restore"
@@ -225,10 +257,14 @@ export async function restoreRevenueCatPurchases() {
       activeEntitlements: Object.keys(customerInfo.entitlements.active || {}),
     });
 
-    await syncRevenueCatPurchases("post-restore-purchases");
+    await syncRevenueCatSubscriptionToBackend("post-restore-purchases");
     return customerInfo;
   } catch (e) {
     console.log("RevenueCat restore error:", e);
     throw e;
   }
+}
+
+export async function refreshRevenueCatSubscriptionState(reason = "manual-refresh") {
+  return syncRevenueCatSubscriptionToBackend(reason);
 }

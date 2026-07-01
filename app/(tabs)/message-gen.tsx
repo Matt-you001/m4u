@@ -496,6 +496,14 @@ export default function GenerateScreen() {
           contentContainerStyle={styles.container}
           keyboardShouldPersistTaps="handled"
         >
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={20} color="#4F46E5" />
+            <Text style={styles.backText}>Back</Text>
+          </TouchableOpacity>
+
           <Text style={styles.title}>Message Generator</Text>
 
         <View style={styles.modeSwitch}>
@@ -980,6 +988,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#F4F7FF',
   },
   container: { padding: 20, backgroundColor: 'transparent', paddingBottom: 36 },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 16,
+    marginBottom: 10,
+  },
+  backText: {
+    color: '#4F46E5',
+    fontWeight: '700',
+    fontSize: 16,
+  },
   bannerWrap: {
     marginBottom: 14,
     alignItems: 'center',
@@ -989,7 +1009,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
     color: '#4F46E5',
-    marginTop: 20,
+    marginTop: 0,
     marginBottom: 14,
   },
   modeSwitch: {

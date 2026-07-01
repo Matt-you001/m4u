@@ -11,6 +11,51 @@ const PLAN_LIMITS = {
   premium: 80,
 };
 
+function getPlanFromRevenueCatSnapshot(entitlementIds = [], productIds = []) {
+  const basicEntitlementId = String(
+    process.env.REVENUECAT_BASIC_ENTITLEMENT_ID || "entl48c716552a"
+  )
+    .trim()
+    .toLowerCase();
+  const premiumEntitlementId = String(
+    process.env.REVENUECAT_PREMIUM_ENTITLEMENT_ID || "entl459591f140"
+  )
+    .trim()
+    .toLowerCase();
+  const normalizedEntitlements = entitlementIds
+    .map((item) => String(item || "").trim().toLowerCase())
+    .filter(Boolean);
+  const normalizedProducts = productIds
+    .map((item) => String(item || "").trim().toLowerCase())
+    .filter(Boolean);
+
+  if (
+    normalizedProducts.some((item) => item.includes("premium")) ||
+    normalizedEntitlements.some(
+      (item) =>
+        item === "premium" ||
+        item === "m4u premium" ||
+        item === premiumEntitlementId
+    )
+  ) {
+    return "premium";
+  }
+
+  if (
+    normalizedProducts.some((item) => item.includes("basic")) ||
+    normalizedEntitlements.some(
+      (item) =>
+        item === "basic" ||
+        item === "m4u basic" ||
+        item === basicEntitlementId
+    )
+  ) {
+    return "basic";
+  }
+
+  return null;
+}
+
 /**
  * POST /user/upgrade
  * Body: { plan: "basic" | "premium" }
@@ -231,6 +276,91 @@ router.post("/change-password", authenticateUser, async (req, res) => {
   } catch (err) {
     console.error("Change password error:", err);
     res.status(500).json({ message: "Failed to change password" });
+  }
+});
+
+router.post("/sync-subscription", authenticateUser, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { entitlementIds = [], productIds = [] } = req.body || {};
+
+    const syncedPlan = getPlanFromRevenueCatSnapshot(entitlementIds, productIds);
+
+    if (syncedPlan) {
+      await pool.query(
+        `
+        UPDATE users
+        SET
+          plan = $1,
+          credits = CASE
+            WHEN plan = $1 THEN credits
+            ELSE $2
+          END,
+          extra_credits = CASE
+            WHEN plan = $1 THEN extra_credits
+            ELSE 0
+          END,
+          last_credit_reset = CASE
+            WHEN plan = $1 THEN last_credit_reset
+            ELSE NOW()
+          END
+        WHERE id = $3
+        `,
+        [syncedPlan, PLAN_LIMITS[syncedPlan], userId]
+      );
+    }
+
+    const { rows } = await pool.query(
+      `
+      SELECT
+        id,
+        first_name,
+        last_name,
+        phone_number,
+        email,
+        plan,
+        credits,
+        extra_credits,
+        referral_code,
+        COALESCE((
+          SELECT COUNT(*)::int
+          FROM users referrals
+          WHERE referrals.referred_by_user_id = users.id
+            AND referrals.referral_rewarded_at IS NOT NULL
+        ), 0) AS successful_referrals
+      FROM users
+      WHERE id = $1
+      `,
+      [userId]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const user = rows[0];
+    const baseCredits = PLAN_LIMITS[user.plan] || 10;
+    const usedCredits = Math.max(baseCredits - user.credits, 0);
+
+    return res.json({
+      synced: Boolean(syncedPlan),
+      id: user.id,
+      firstName: user.first_name || "",
+      lastName: user.last_name || "",
+      phoneNumber: user.phone_number || "",
+      email: user.email,
+      plan: user.plan,
+      credits: user.credits,
+      extraCredits: user.extra_credits,
+      totalCredits: user.credits + user.extra_credits,
+      baseCredits,
+      usedCredits,
+      referralCode: user.referral_code || `M4U${user.id}`,
+      successfulReferrals: Number(user.successful_referrals) || 0,
+    });
+  } catch (err) {
+    console.error("Subscription sync error:", err);
+    return res.status(500).json({ error: "Failed to sync subscription" });
   }
 });
 

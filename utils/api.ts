@@ -53,8 +53,13 @@ api.interceptors.response.use(
     const status = error?.response?.status;
     const url = error?.config?.url || "";
     const isAuthRequest = url.includes("/auth/");
+    const errorCode = String(error?.response?.data?.code || "").trim();
 
-    if (status === 401 && !isAuthRequest) {
+    if (
+      status === 401 &&
+      !isAuthRequest &&
+      (errorCode === "TOKEN_EXPIRED" || errorCode === "INVALID_TOKEN")
+    ) {
       try {
         const store = getAuthStore();
         if (store?.clearSession) {

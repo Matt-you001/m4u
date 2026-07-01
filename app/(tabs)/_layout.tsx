@@ -1,9 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../../context/AuthContext";
 
 export default function TabLayout() {
   const { plan } = useAuth();
+  const insets = useSafeAreaInsets();
 
   return (
     <Tabs
@@ -14,9 +16,9 @@ export default function TabLayout() {
         tabBarStyle: {
           backgroundColor: "rgba(255,255,255,0.95)",
           borderTopColor: "#E0E7FF",
-          height: 64,
+          height: 68 + insets.bottom,
           paddingTop: 6,
-          paddingBottom: 8,
+          paddingBottom: Math.max(insets.bottom, 12),
         },
         sceneStyle: {
           backgroundColor: "#F4F7FF",

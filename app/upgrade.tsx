@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -50,11 +51,21 @@ export default function UpgradeScreen() {
       setErrorMessage("");
 
       const didUnlockPlan = await presentSubscriptionPaywall();
-      await refreshUser();
 
       if (didUnlockPlan) {
+        const updatedUser = await refreshUser();
+
+        Alert.alert(
+          "Subscription successful",
+          updatedUser?.plan && updatedUser.plan !== "free"
+            ? `Your ${String(updatedUser.plan).toUpperCase()} plan is now active.`
+            : "Your subscription was received. We are refreshing your plan now."
+        );
         router.back();
+        return;
       }
+
+      await refreshUser();
     } catch (error) {
       console.log("paywall failed", error);
       setErrorMessage("Unable to open subscriptions right now. Please try again.");

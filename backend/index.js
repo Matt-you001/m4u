@@ -867,7 +867,7 @@ app.post("/auth/login", async (req, res) => {
         extraCredits: user.extra_credits,
       },
       process.env.JWT_SECRET,
-      { expiresIn: "7d" }
+      { expiresIn: "365d" }
     );
 
     res.json({
@@ -1066,7 +1066,7 @@ app.post("/auth/google", async (req, res) => {
         extraCredits: user.extra_credits,
       },
       process.env.JWT_SECRET,
-      { expiresIn: "7d" }
+      { expiresIn: "365d" }
     );
 
     res.json({
