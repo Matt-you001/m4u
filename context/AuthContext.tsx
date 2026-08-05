@@ -11,7 +11,9 @@ import {
 import { AppState } from "react-native";
 import BrandedLoader from "../components/BrandedLoader";
 import { setAuthStore } from "../store/authStore";
+import { maybeShowAppOpenAd, primeAppOpenAd } from "../utils/admob";
 import { clearHistory } from "../utils/history";
+import { captureAndroidInstallReferralCode } from "../utils/installReferrer";
 import api from "../utils/api";
 import {
   configurePurchases,
@@ -38,6 +40,17 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
+const TOKEN_STORAGE_KEY = "token";
+const USER_CACHE_STORAGE_KEY = "m4u_user_cache";
+
+type CachedUser = {
+  id?: string | number;
+  plan?: Plan;
+  credits?: number;
+  firstName?: string;
+  lastName?: string;
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -49,8 +62,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const segments = useSegments();
 
+  const applyUserSnapshot = useCallback((user?: CachedUser | null) => {
+    if (!user) {
+      return;
+    }
+
+    setPlan((user.plan as Plan) || "free");
+    setCredits(Math.max(0, Number(user.credits) || 0));
+    setFirstName(user.firstName || "");
+    setLastName(user.lastName || "");
+  }, []);
+
+  const persistUserSnapshot = useCallback(async (user?: CachedUser | null) => {
+    if (!user) {
+      return;
+    }
+
+    await AsyncStorage.setItem(
+      USER_CACHE_STORAGE_KEY,
+      JSON.stringify({
+        id: user.id,
+        plan: (user.plan as Plan) || "free",
+        credits: Math.max(0, Number(user.credits) || 0),
+        firstName: user.firstName || "",
+        lastName: user.lastName || "",
+      })
+    );
+  }, []);
+
   const clearSession = useCallback(async () => {
-    await AsyncStorage.removeItem("token");
+    await AsyncStorage.multiRemove([
+      TOKEN_STORAGE_KEY,
+      USER_CACHE_STORAGE_KEY,
+    ]);
     delete api.defaults.headers.common.Authorization;
     await logoutPurchases();
 
@@ -69,10 +113,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           ? res.data.totalCredits
           : (res.data.credits ?? 0) + (res.data.extraCredits ?? 0);
 
-      setPlan(res.data.plan || "free");
-      setCredits(totalCredits);
-      setFirstName(res.data.firstName || "");
-      setLastName(res.data.lastName || "");
+      const userSnapshot: CachedUser = {
+        id: res.data.id,
+        plan: (res.data.plan as Plan) || "free",
+        credits: totalCredits,
+        firstName: res.data.firstName || "",
+        lastName: res.data.lastName || "",
+      };
+
+      applyUserSnapshot(userSnapshot);
+      await persistUserSnapshot(userSnapshot);
 
       console.log(
         "user refreshed:",
@@ -96,31 +146,71 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log("failed to refresh user", err);
       return null;
     }
-  }, [clearSession]);
+  }, [applyUserSnapshot, clearSession, persistUserSnapshot]);
 
   useEffect(() => {
     const bootstrap = async () => {
-      await configurePurchases();
-
-      const storedToken = await AsyncStorage.getItem("token");
+      const [storedToken, storedUser] = await Promise.all([
+        AsyncStorage.getItem(TOKEN_STORAGE_KEY),
+        AsyncStorage.getItem(USER_CACHE_STORAGE_KEY),
+      ]);
+      let cachedUser: CachedUser | null = null;
 
       if (storedToken) {
         setToken(storedToken);
         api.defaults.headers.common.Authorization = `Bearer ${storedToken}`;
+      } else {
+        delete api.defaults.headers.common.Authorization;
+      }
 
-        const user = await refreshUser();
-
-        if (user?.id) {
-          await initPurchases(String(user.id));
-          await refreshUser();
+      if (storedUser) {
+        try {
+          cachedUser = JSON.parse(storedUser);
+          applyUserSnapshot(cachedUser);
+        } catch (error) {
+          console.log("failed to parse cached user", error);
+          await AsyncStorage.removeItem(USER_CACHE_STORAGE_KEY);
         }
       }
 
       setLoading(false);
+
+      void captureAndroidInstallReferralCode().catch((error) => {
+        console.log("install referrer bootstrap failed", error);
+      });
+
+      void configurePurchases().catch((error) => {
+        console.log("purchase configure failed", error);
+      });
+
+      if (storedToken) {
+        primeAppOpenAd();
+        void maybeShowAppOpenAd(cachedUser?.plan || "free", "launch").catch(
+          (error) => {
+            console.log("app open launch check failed", error);
+          }
+        );
+
+        void refreshUser()
+          .then((user) => {
+            if (user?.id) {
+              return initPurchases(String(user.id))
+                .then(() => refreshUser())
+                .catch((error) => {
+                  console.log("purchase init bootstrap failed", error);
+                });
+            }
+
+            return null;
+          })
+          .catch((error) => {
+            console.log("user bootstrap refresh failed", error);
+          });
+      }
     };
 
     bootstrap();
-  }, [refreshUser]);
+  }, [applyUserSnapshot, refreshUser]);
 
   useEffect(() => {
     if (!token) {
@@ -133,17 +223,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        await refreshRevenueCatSubscriptionState("app-resume");
-        await refreshUser();
+        void maybeShowAppOpenAd(plan, "resume").catch((error) => {
+          console.log("resume app open ad failed", error);
+        });
+
+        const user = await refreshUser();
+
+        if (user?.id && user?.plan && user.plan !== "free") {
+          void refreshRevenueCatSubscriptionState("app-resume").catch(
+            (error) => {
+              console.log("resume subscription sync failed", error);
+            }
+          );
+        }
       } catch (error) {
-        console.log("resume subscription sync failed", error);
+        console.log("resume refresh failed", error);
       }
     });
 
     return () => {
       subscription.remove();
     };
-  }, [token, refreshUser]);
+  }, [plan, token, refreshUser]);
 
   useEffect(() => {
     setAuthStore({ refreshUser, clearSession });
@@ -168,17 +269,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [token, segments, loading, router]);
 
   const login = async (newToken: string) => {
-    await AsyncStorage.setItem("token", newToken);
+    await AsyncStorage.setItem(TOKEN_STORAGE_KEY, newToken);
     api.defaults.headers.common.Authorization = `Bearer ${newToken}`;
     setToken(newToken);
-
-    const user = await refreshUser();
-
-    if (user?.id) {
-      await initPurchases(String(user.id));
-    }
-
     router.replace("/(tabs)");
+
+    void refreshUser()
+      .then((user) => {
+        if (user?.id) {
+          return initPurchases(String(user.id)).catch((error) => {
+            console.log("purchase init after login failed", error);
+          });
+        }
+
+        return null;
+      })
+      .catch((error) => {
+        console.log("user refresh after login failed", error);
+      });
   };
 
   const logout = async () => {

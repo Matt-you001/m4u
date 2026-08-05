@@ -1,23 +1,38 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import * as Clipboard from 'expo-clipboard';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import BrandedBackdrop from 'components/BrandedBackdrop';
+import HomeNativeAdCard from 'components/HomeNativeAdCard';
 import ProfileMenu from 'components/ProfileMenu';
+import * as Clipboard from 'expo-clipboard';
+import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { BannerAd } from 'react-native-google-mobile-ads';
-import { Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  Modal,
+  Pressable,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useAuth } from '../../context/AuthContext';
-import { bannerAdUnitId, defaultBannerSize } from '../../utils/admob';
 import api from '../../utils/api';
 
 const FEEDBACK_DISMISS_KEY = 'm4u_feedback_prompt_dismissed_at';
+const FEEDBACK_USAGE_COUNT_KEY = 'm4u_feedback_prompt_usage_count';
 const FEEDBACK_REMIND_AFTER_MS = 1000 * 60 * 60 * 24 * 7;
+const FEEDBACK_FIRST_SHOW_AT = 3;
+const FEEDBACK_SHOW_INTERVAL = 5;
+const PLAY_STORE_URL =
+  'https://play.google.com/store/apps/details?id=com.mattonah.message4u';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { plan, credits, logout, token, firstName, lastName, refreshUser } = useAuth();
+  const { plan, credits, logout, token, firstName, lastName, refreshUser } =
+    useAuth();
   const isLoggedIn = !!token;
   const [menuPlan, setMenuPlan] = useState(plan);
   const [menuCredits, setMenuCredits] = useState(credits);
@@ -35,31 +50,43 @@ export default function HomeScreen() {
     setMenuLastName(lastName);
   }, [credits, firstName, lastName, plan]);
 
-  useEffect(() => {
-    const loadFeedbackPrompt = async () => {
-      try {
-        const dismissedAt = await AsyncStorage.getItem(FEEDBACK_DISMISS_KEY);
+  const syncFeedbackPrompt = useCallback(async () => {
+    if (!token) {
+      setShowFeedbackPrompt(false);
+      return;
+    }
 
-        if (!dismissedAt) {
-          setShowFeedbackPrompt(true);
-          return;
-        }
+    try {
+      const storedCount = await AsyncStorage.getItem(FEEDBACK_USAGE_COUNT_KEY);
+      const nextCount = Number(storedCount || '0') + 1;
+      await AsyncStorage.setItem(FEEDBACK_USAGE_COUNT_KEY, String(nextCount));
 
-        const nextEligibleTime = Number(dismissedAt) + FEEDBACK_REMIND_AFTER_MS;
-        setShowFeedbackPrompt(Date.now() >= nextEligibleTime);
-      } catch {
-        setShowFeedbackPrompt(true);
+      const dismissedAt = await AsyncStorage.getItem(FEEDBACK_DISMISS_KEY);
+      const shouldShowByUsage =
+        nextCount >= FEEDBACK_FIRST_SHOW_AT &&
+        (nextCount === FEEDBACK_FIRST_SHOW_AT ||
+          (nextCount - FEEDBACK_FIRST_SHOW_AT) % FEEDBACK_SHOW_INTERVAL === 0);
+
+      if (!dismissedAt) {
+        setShowFeedbackPrompt(shouldShowByUsage);
+        return;
       }
-    };
 
-    loadFeedbackPrompt();
-  }, []);
+      const nextEligibleTime =
+        Number(dismissedAt) + FEEDBACK_REMIND_AFTER_MS;
+      setShowFeedbackPrompt(
+        shouldShowByUsage && Date.now() >= nextEligibleTime
+      );
+    } catch {
+      setShowFeedbackPrompt(false);
+    }
+  }, [token]);
 
   useFocusEffect(
     useCallback(() => {
       if (!token) return;
 
-      const syncMenu = async () => {
+      const syncHome = async () => {
         await refreshUser();
 
         try {
@@ -78,10 +105,12 @@ export default function HomeScreen() {
         } catch (err) {
           console.log('home menu sync failed', err);
         }
+
+        await syncFeedbackPrompt();
       };
 
-      syncMenu();
-    }, [refreshUser, token])
+      syncHome();
+    }, [refreshUser, syncFeedbackPrompt, token])
   );
 
   const dismissFeedbackPrompt = async () => {
@@ -94,27 +123,90 @@ export default function HomeScreen() {
     router.push('/feedback');
   };
 
+  const getDownloadInviteLink = useCallback((code: string) => {
+    return `${PLAY_STORE_URL}&referrer=${encodeURIComponent(
+      `referral_code=${code}`
+    )}`;
+  }, []);
+
   const handleCopyReferralCode = async () => {
     if (!referralCode) return;
 
-    await Clipboard.setStringAsync(referralCode);
-    setReferralMessage('Referral code copied. Share it with a friend.');
+    await Clipboard.setStringAsync(getDownloadInviteLink(referralCode));
+    setReferralMessage(
+      'Invite link copied. Your referral code is embedded in the link.'
+    );
   };
 
   const handleShareReferral = async () => {
     if (!referralCode) return;
 
-    await Share.share({
-      message: `Join me on Message4U and sign up with my referral code ${referralCode}. Once your account is verified, I earn 1 bonus credit.`,
+    const downloadLink = getDownloadInviteLink(referralCode);
+    const appInviteLink = Linking.createURL('/signup', {
+      queryParams: { ref: referralCode },
     });
 
-    setReferralMessage('Invite shared. You earn 1 credit after each verified signup.');
+    await Share.share({
+      message:
+        `Generate and respond to messages for every occasion on the go with Message4u. ` +
+        `Click ${downloadLink} to download.`
+    });
+
+    setReferralMessage(
+      'Invite shared. You earn 1 credit after each verified signup.'
+    );
   };
 
   return (
     <View style={styles.screen}>
       <BrandedBackdrop light />
-      <View style={styles.container}>
+
+      <Modal
+        transparent
+        visible={showFeedbackPrompt}
+        animationType="fade"
+        onRequestClose={dismissFeedbackPrompt}
+      >
+        <Pressable
+          style={styles.feedbackOverlay}
+          onPress={dismissFeedbackPrompt}
+        >
+          <Pressable style={styles.feedbackModal} onPress={() => {}}>
+            <View style={styles.feedbackIconWrap}>
+              <MaterialCommunityIcons
+                name="message-star-outline"
+                size={24}
+                color="#4338CA"
+              />
+            </View>
+            <Text style={styles.feedbackTitle}>We'd love your feedback</Text>
+            <Text style={styles.feedbackText}>
+              Tell us what feels good, what feels off, or what you want us to
+              improve next.
+            </Text>
+            <View style={styles.feedbackActions}>
+              <TouchableOpacity
+                style={styles.feedbackPrimaryButton}
+                onPress={handleOpenFeedback}
+              >
+                <Text style={styles.feedbackPrimaryText}>Give Feedback</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.feedbackSecondaryButton}
+                onPress={dismissFeedbackPrompt}
+              >
+                <Text style={styles.feedbackSecondaryText}>Not now</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.header}>
           <View style={styles.logoWrap}>
             <Text style={styles.logoMain}>m</Text>
@@ -142,64 +234,6 @@ export default function HomeScreen() {
           <Text style={styles.heroSubtitle}>
             Generate, respond, and refine messages with ease.
           </Text>
-        </View>
-
-        {showFeedbackPrompt && (
-          <View style={styles.feedbackBanner}>
-            <View style={styles.feedbackIconWrap}>
-              <MaterialCommunityIcons name="message-star-outline" size={22} color="#4338CA" />
-            </View>
-            <View style={styles.feedbackContent}>
-              <Text style={styles.feedbackTitle}>We’d love your feedback</Text>
-              <Text style={styles.feedbackText}>
-                Tell us what feels good, what feels off, or what you want us to improve next.
-              </Text>
-              <View style={styles.feedbackActions}>
-                <TouchableOpacity style={styles.feedbackPrimaryButton} onPress={handleOpenFeedback}>
-                  <Text style={styles.feedbackPrimaryText}>Give Feedback</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.feedbackSecondaryButton} onPress={dismissFeedbackPrompt}>
-                  <Text style={styles.feedbackSecondaryText}>Not now</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        )}
-
-        <View style={styles.referralCard}>
-          <View style={styles.referralHeader}>
-            <View>
-              <Text style={styles.referralTitle}>Refer to earn 1 credit</Text>
-              <Text style={styles.referralText}>
-                Share your code. When someone signs up and verifies with it, you get 1 bonus credit.
-              </Text>
-            </View>
-            <View style={styles.referralCountPill}>
-              <Text style={styles.referralCountLabel}>Referrals</Text>
-              <Text style={styles.referralCountValue}>{successfulReferrals}</Text>
-            </View>
-          </View>
-
-          <View style={styles.referralCodeBox}>
-            <Text style={styles.referralCodeLabel}>Your code</Text>
-            <Text style={styles.referralCodeValue}>{referralCode || 'Loading...'}</Text>
-          </View>
-
-          <View style={styles.referralButtonRow}>
-            <TouchableOpacity style={styles.referralPrimaryButton} onPress={handleShareReferral}>
-              <Text style={styles.referralPrimaryText}>Share Invite</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.referralSecondaryButton} onPress={handleCopyReferralCode}>
-              <Text style={styles.referralSecondaryText}>Copy Code</Text>
-            </TouchableOpacity>
-          </View>
-
-          {!!referralMessage && <Text style={styles.referralHelper}>{referralMessage}</Text>}
-          {menuPlan === 'free' && (
-            <Text style={styles.rewardReminder}>
-              Watch video for +1 credit is still active for free users when you run out of credits.
-            </Text>
-          )}
         </View>
 
         <View style={styles.actions}>
@@ -233,17 +267,73 @@ export default function HomeScreen() {
             </Text>
           </TouchableOpacity>
 
+          <View style={styles.referralCard}>
+            <View style={styles.referralHeader}>
+              <View>
+                <Text style={styles.referralTitle}>Refer to earn 1 credit</Text>
+                <Text style={styles.referralText}>
+                  Share your code. When someone signs up and verifies with it,
+                  you get 1 bonus credit.
+                </Text>
+              </View>
+              <View style={styles.referralCountPill}>
+                <Text style={styles.referralCountLabel}>Referrals</Text>
+                <Text style={styles.referralCountValue}>
+                  {successfulReferrals}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.referralCodeBox}>
+              <Text style={styles.referralCodeLabel}>Your code</Text>
+              <Text style={styles.referralCodeValue}>
+                {referralCode || 'Loading...'}
+              </Text>
+            </View>
+
+            <View style={styles.referralButtonRow}>
+              <TouchableOpacity
+                style={styles.referralPrimaryButton}
+                onPress={handleShareReferral}
+              >
+                <Text style={styles.referralPrimaryText}>Share Invite</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.referralSecondaryButton}
+                onPress={handleCopyReferralCode}
+              >
+                <Text style={styles.referralSecondaryText}>Copy Link</Text>
+              </TouchableOpacity>
+            </View>
+
+            {!!referralMessage && (
+              <Text style={styles.referralHelper}>{referralMessage}</Text>
+            )}
+            {menuPlan === 'free' && (
+              <Text style={styles.rewardReminder}>
+                Watch video for +1 credit is still active for free users when
+                you run out of credits.
+              </Text>
+            )}
+          </View>
+
           <TouchableOpacity
             style={[
               styles.card,
               menuPlan === 'free' && styles.lockedCard,
             ]}
             onPress={() =>
-              menuPlan === 'free' ? router.push('/upgrade') : router.push('/history')
+              menuPlan === 'free'
+                ? router.push('/upgrade')
+                : router.push('/history')
             }
           >
             <View style={styles.historyRow}>
-              <MaterialCommunityIcons name="history" size={28} color="#4F46E5" />
+              <MaterialCommunityIcons
+                name="history"
+                size={28}
+                color="#4F46E5"
+              />
               {menuPlan === 'free' && (
                 <View style={styles.paidBadge}>
                   <Text style={styles.paidBadgeText}>Paid</Text>
@@ -261,18 +351,14 @@ export default function HomeScreen() {
 
         <View style={styles.footer}>
           {menuPlan === 'free' ? (
-            <View style={styles.bannerWrap}>
-              <BannerAd
-                unitId={bannerAdUnitId}
-                size={defaultBannerSize}
-                requestOptions={{ requestNonPersonalizedAdsOnly: true }}
-              />
+            <View style={styles.nativeAdWrap}>
+              <HomeNativeAdCard />
             </View>
           ) : (
             <Text style={styles.footerText}>Crafted for clarity</Text>
           )}
         </View>
-      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -285,7 +371,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: 'transparent',
+  },
+  contentContainer: {
     paddingHorizontal: 16,
+    paddingBottom: 128,
   },
   header: {
     paddingTop: 50,
@@ -338,19 +427,25 @@ const styles = StyleSheet.create({
     marginTop: 8,
     maxWidth: 270,
   },
-  feedbackBanner: {
-    marginBottom: 16,
-    borderRadius: 22,
-    padding: 18,
-    backgroundColor: 'rgba(238,242,255,0.92)',
+  feedbackOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.34)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  feedbackModal: {
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: 24,
+    padding: 22,
+    backgroundColor: 'rgba(255,255,255,0.97)',
     borderWidth: 1,
     borderColor: '#C7D2FE',
-    flexDirection: 'row',
-    gap: 14,
-    shadowColor: '#312E81',
-    shadowOpacity: 0.05,
-    shadowRadius: 14,
-    elevation: 3,
+    shadowColor: '#1E1B4B',
+    shadowOpacity: 0.14,
+    shadowRadius: 24,
+    elevation: 8,
   },
   feedbackIconWrap: {
     width: 42,
@@ -359,16 +454,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#EEF2FF',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 2,
-  },
-  feedbackContent: {
-    flex: 1,
+    marginBottom: 14,
   },
   feedbackTitle: {
     fontSize: 16,
     fontWeight: '800',
     color: '#111827',
-    marginBottom: 4,
+    marginBottom: 8,
   },
   feedbackText: {
     fontSize: 14,
@@ -378,7 +470,7 @@ const styles = StyleSheet.create({
   feedbackActions: {
     flexDirection: 'row',
     gap: 10,
-    marginTop: 14,
+    marginTop: 16,
   },
   feedbackPrimaryButton: {
     backgroundColor: '#4F46E5',
@@ -403,7 +495,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   referralCard: {
-    marginBottom: 16,
     backgroundColor: 'rgba(255,255,255,0.9)',
     borderRadius: 22,
     padding: 18,
@@ -570,12 +661,11 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   footer: {
-    marginTop: 'auto',
+    marginTop: 18,
     paddingVertical: 18,
     alignItems: 'center',
   },
-  bannerWrap: {
-    alignItems: 'center',
+  nativeAdWrap: {
     width: '100%',
   },
   footerText: {

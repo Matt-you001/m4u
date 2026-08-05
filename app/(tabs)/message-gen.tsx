@@ -27,6 +27,7 @@ import {
 } from 'react-native';
 import { BannerAd } from 'react-native-google-mobile-ads';
 import MessageActions from '../../components/MessageActions';
+import { saveGreetingCardDraft } from '../../utils/greetingCardDraft';
 import { saveToHistory } from '../../utils/history';
 
 const TEST_MODE = true;
@@ -488,6 +489,25 @@ export default function GenerateScreen() {
     }
   };
 
+  const openGreetingCardStudio = async () => {
+    if (!result.trim() || mode !== 'individual') return;
+
+    if (plan === 'free') {
+      router.push('/upgrade');
+      return;
+    }
+
+    await saveGreetingCardDraft({
+      message: result.trim(),
+      category: finalCategory,
+      tone: finalTone,
+      recipientName: recipientName.trim(),
+      senderName: senderName.trim(),
+      language: finalLanguage,
+    });
+    router.push('/greeting-card');
+  };
+
   return (
     <>
       <View style={styles.screen}>
@@ -584,6 +604,7 @@ export default function GenerateScreen() {
                 dropdownIconColor="#6B7280"
               >
                 <Picker.Item label="Select tone..." value="" />
+                <Picker.Item label="Neutral" value="Neutral" />
                 <Picker.Item label="Funny" value="Funny" />
                 <Picker.Item label="Grateful" value="Grateful" />
                 <Picker.Item label="Romantic" value="Romantic" />
@@ -966,6 +987,21 @@ export default function GenerateScreen() {
                   mode === 'corporate' ? finalBusinessPlatform : undefined
                 }
               />
+              {mode === 'individual' && (
+                <TouchableOpacity
+                  style={styles.cardStudioButton}
+                  onPress={openGreetingCardStudio}
+                >
+                  <Ionicons
+                    name={plan === 'free' ? 'lock-closed-outline' : 'image-outline'}
+                    size={20}
+                    color="#FFFFFF"
+                  />
+                  <Text style={styles.cardStudioButtonText}>
+                    {plan === 'free' ? 'Unlock Greeting Cards' : 'Create Greeting Card'}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
         </ScrollView>
@@ -1204,6 +1240,21 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(191, 219, 254, 0.9)',
   },
   resultText: { fontSize: 16, lineHeight: 24, color: '#111827' },
+  cardStudioButton: {
+    minHeight: 52,
+    marginTop: 8,
+    borderRadius: 16,
+    backgroundColor: '#4F46E5',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  cardStudioButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '800',
+  },
   errorText: {
     color: 'red',
     textAlign: 'center',

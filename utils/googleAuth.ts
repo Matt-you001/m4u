@@ -1,10 +1,35 @@
+import Constants from "expo-constants";
 import {
   GoogleSignin,
   statusCodes,
 } from "@react-native-google-signin/google-signin";
 
+type GoogleAuthConfig = {
+  androidClientId?: string;
+  webClientId?: string;
+};
+
+function getGoogleAuthConfig(): GoogleAuthConfig {
+  const extra = Constants.expoConfig?.extra as
+    | {
+        googleAuth?: GoogleAuthConfig;
+      }
+    | undefined;
+
+  return {
+    androidClientId:
+      extra?.googleAuth?.androidClientId ||
+      "1051139924143-khl8kl4um2jhn13kgvgjm4c2eqs44uq1.apps.googleusercontent.com",
+    webClientId:
+      extra?.googleAuth?.webClientId ||
+      "1051139924143-mm1c6klh2tcde54kr0jhgmj5scvbjf2q.apps.googleusercontent.com",
+  };
+}
+
+const googleAuthConfig = getGoogleAuthConfig();
+
 GoogleSignin.configure({
-  webClientId: "323152840697-4r25a9k4fd0occ021iarr5s22o3qms9t.apps.googleusercontent.com",
+  webClientId: googleAuthConfig.webClientId,
   offlineAccess: false,
 });
 
@@ -46,4 +71,14 @@ export async function signInWithGoogle() {
     });
     throw error;
   }
+}
+
+export function mapGoogleUser(userInfo: any) {
+  const user = userInfo?.data?.user || userInfo?.user || {};
+
+  return {
+    email: String(user.email || "").trim().toLowerCase(),
+    firstName: String(user.givenName || user.firstName || "").trim(),
+    lastName: String(user.familyName || user.lastName || "").trim(),
+  };
 }

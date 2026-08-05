@@ -64,7 +64,15 @@
           }
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-sharing",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Message4u to use a selected photo as a greeting card background.",
+          "cameraPermission": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
@@ -72,6 +80,10 @@
     },
     "extra": {
       "router": {},
+      "googleAuth": {
+        "androidClientId": "1051139924143-khl8kl4um2jhn13kgvgjm4c2eqs44uq1.apps.googleusercontent.com",
+        "webClientId": "1051139924143-mm1c6klh2tcde54kr0jhgmj5scvbjf2q.apps.googleusercontent.com"
+      },
       "revenuecat": {
         "testApiKey": "test_hAUFSXISuwFRqhWKUcatrdmbimr",
         "androidApiKey": "goog_QOIJOUpuYylDMEyMNsgqaXRophJ",
@@ -86,7 +98,9 @@
         "androidInterstitialAdUnitId": "ca-app-pub-8208154537756936/4426797335",
         "iosInterstitialAdUnitId": "ca-app-pub-3940256099942544/4411468910",
         "androidRewardedAdUnitId": "ca-app-pub-8208154537756936/6861388989",
-        "iosRewardedAdUnitId": "ca-app-pub-3940256099942544/1712485313"
+        "iosRewardedAdUnitId": "ca-app-pub-3940256099942544/1712485313",
+        "androidNativeAdvancedAdUnitId": "ca-app-pub-8208154537756936/6994367889",
+        "androidAppOpenAdUnitId": "ca-app-pub-8208154537756936/1563710715"
       },
       "eas": {
         "projectId": "39b5dff0-684e-46b4-996d-9840d4defe6d"

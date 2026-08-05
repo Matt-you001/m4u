@@ -23,6 +23,7 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="feedback" />
           <Stack.Screen name="delete-account" />
+          <Stack.Screen name="greeting-card" />
         </Stack>
         <StatusBar style="auto" />
       </ThemeProvider>

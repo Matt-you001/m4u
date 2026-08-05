@@ -12,6 +12,11 @@ import {
 import { Button, TextInput } from "react-native-paper";
 import { useAuth } from "../context/AuthContext";
 import api from "../utils/api";
+import {
+  getGoogleSignInErrorMessage,
+  mapGoogleUser,
+  signInWithGoogle,
+} from "../utils/googleAuth";
 
 export default function Login() {
   const router = useRouter();
@@ -20,6 +25,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
 
@@ -76,6 +82,37 @@ export default function Login() {
     }
   };
 
+  const handleGoogleLogin = async () => {
+    try {
+      setGoogleLoading(true);
+      setError("");
+      setInfo("");
+
+      const userInfo = await signInWithGoogle();
+      const googleUser = mapGoogleUser(userInfo);
+
+      if (!googleUser.email) {
+        setError("Google sign-in did not return an email address.");
+        return;
+      }
+
+      const res = await api.post("/auth/google", {
+        email: googleUser.email,
+        firstName: googleUser.firstName,
+        lastName: googleUser.lastName,
+      });
+
+      await login(res.data.token);
+    } catch (err: any) {
+      console.log("GOOGLE LOGIN FAILED:", err?.response?.data || err?.message || err);
+      setError(
+        err?.response?.data?.message || getGoogleSignInErrorMessage(err)
+      );
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.wrapper}
@@ -128,6 +165,16 @@ export default function Login() {
           disabled={loading}
         >
           Sign In
+        </Button>
+
+        <Button
+          mode="outlined"
+          onPress={handleGoogleLogin}
+          style={styles.googleButton}
+          loading={googleLoading}
+          disabled={googleLoading}
+        >
+          Continue with Google
         </Button>
 
         <Link
@@ -194,6 +241,10 @@ const styles = StyleSheet.create({
   button: {
     marginTop: 8,
     paddingVertical: 6,
+    borderRadius: 8,
+  },
+  googleButton: {
+    marginTop: 12,
     borderRadius: 8,
   },
   forgotLinkWrap: {

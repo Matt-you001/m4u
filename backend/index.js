@@ -12,6 +12,7 @@ import {
 import { getOpenAI } from "./lib/openai.js";
 import { authenticateUser } from "./middleware/auth.js";
 import { creditGuard } from "./middleware/creditGuard.js";
+import { paidPlanGuard } from "./middleware/paidPlanGuard.js";
 import userRoutes from "./routes/user.js";
 
 const app = express();
@@ -985,13 +986,14 @@ app.post("/feedback", authenticateUser, async (req, res) => {
 
 app.post("/auth/google", async (req, res) => {
   try {
-    const { email, firstName, lastName } = req.body;
+    const { email, firstName, lastName, referralCode } = req.body;
 
     if (!email) {
       return res.status(400).json({ message: "Email required" });
     }
 
     const normalizedEmail = email.trim().toLowerCase();
+    const normalizedReferralCode = normalizeReferralCode(referralCode);
 
     let result = await pool.query(
       `
@@ -1005,6 +1007,20 @@ app.post("/auth/google", async (req, res) => {
     let user;
 
     if (result.rows.length === 0) {
+      let referredByUserId = null;
+
+      if (normalizedReferralCode) {
+        const referrer = await findReferrerByCode(pool, normalizedReferralCode);
+
+        if (!referrer) {
+          return res.status(400).json({
+            message: "Referral code is invalid",
+          });
+        }
+
+        referredByUserId = referrer.id;
+      }
+
       const insert = await pool.query(
         `
         INSERT INTO users (
@@ -1014,19 +1030,23 @@ app.post("/auth/google", async (req, res) => {
           plan,
           credits,
           extra_credits,
-          email_verified
+          email_verified,
+          referred_by_user_id
         )
-        VALUES ($1, $2, $3, 'free', 10, 0, true)
+        VALUES ($1, $2, $3, 'free', 10, 0, true, $4)
         RETURNING id, email, first_name, last_name, plan, credits, extra_credits, email_verified
         `,
         [
           firstName?.trim() || "",
           lastName?.trim() || "",
           normalizedEmail,
+          referredByUserId,
         ]
       );
 
       user = insert.rows[0];
+      await ensureUserReferralCode(pool, user.id);
+      await awardReferralCreditIfEligible(pool, user.id);
     } else {
       user = result.rows[0];
 
@@ -1193,7 +1213,7 @@ function getToneGuidance(tone) {
     case "firm":
       return "Be clear and direct, but not cold. Let the firmness sound human and grounded.";
     case "neutral":
-      return "Keep it balanced, natural, and easy to read.";
+      return "Write a clear, straightforward, and natural message without adding a strong emotional style. Avoid making it overly warm, funny, romantic, dramatic, persuasive, or formal. Focus calmly on the occasion, context, and essential meaning while still sounding like a real person.";
     default:
       return tone
         ? `Honor the requested tone of "${tone}" in a natural, believable way without forcing it.`
@@ -1543,6 +1563,82 @@ Keep it concise and immediately usable as a personal message.`,
     return handleAiRouteError(res, error, "AI generation failed");
   }
 });
+
+app.post(
+  "/generate-card-text",
+  authenticateUser,
+  paidPlanGuard,
+  creditGuard,
+  async (req, res) => {
+    try {
+      const {
+        category,
+        tone,
+        context,
+        recipientName,
+        language,
+      } = req.body;
+
+      if (!category?.trim()) {
+        return res.status(400).json({ error: "Category is required" });
+      }
+
+      const finalLanguage = language?.trim() || "English";
+      const modelConfig = getModelConfigForPlan(req.currentPlan || req.user.plan);
+      const openai = getOpenAI();
+      const completion = await createChatCompletionWithFallback(openai, modelConfig, {
+        messages: [
+          {
+            role: "system",
+            content: `You write concise greeting-card copy that looks elegant when placed on an image.
+
+Return exactly two lines in this format:
+HEADLINE: a short headline of no more than 5 words
+MESSAGE: one natural card message of no more than 24 words
+
+Do not use markdown, quotation marks, placeholders, signatures, hashtags, or emojis.
+Do not repeat the headline in the message.
+Keep the wording human, memorable, and suitable for a visual greeting card.
+Write both lines entirely in ${finalLanguage}.`,
+          },
+          {
+            role: "user",
+            content: `Create short greeting-card copy.
+
+Occasion: ${category.trim()}
+Tone: ${tone?.trim() || "Neutral"}
+Recipient: ${recipientName?.trim() || "Not specified"}
+Context from the original message: ${context?.trim() || "None"}
+
+Tone guidance: ${getToneGuidance(tone || "neutral")}
+Occasion guidance: ${getCategoryGuidance(category)}`,
+          },
+        ],
+        temperature: Math.min(modelConfig.temperature, 0.9),
+      });
+
+      const rawCopy = String(completion.choices[0].message.content || "").trim();
+      const lines = rawCopy.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+      const headlineLine = lines.find((line) => /^headline\s*:/i.test(line));
+      const messageLine = lines.find((line) => /^message\s*:/i.test(line));
+      const headline = String(headlineLine || lines[0] || category)
+        .replace(/^headline\s*:/i, "")
+        .trim();
+      const message = String(messageLine || lines.slice(1).join(" ") || rawCopy)
+        .replace(/^message\s*:/i, "")
+        .trim();
+
+      res.json({
+        headline,
+        message,
+        remainingCredits: req.remainingCredits,
+      });
+    } catch (error) {
+      console.error("Card text generation error:", error);
+      return handleAiRouteError(res, error, "Card text generation failed");
+    }
+  }
+);
 
 // Respond
 app.post("/respond", authenticateUser, creditGuard, async (req, res) => {

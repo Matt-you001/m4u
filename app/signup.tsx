@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import { Link, useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { Link, useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Keyboard,
@@ -15,10 +15,19 @@ import {
   TouchableWithoutFeedback,
   View
 } from "react-native";
+import { clearStoredReferralCode, getStoredReferralCode } from "../utils/installReferrer";
+import { useAuth } from "../context/AuthContext";
 import api from "../utils/api";
+import {
+  getGoogleSignInErrorMessage,
+  mapGoogleUser,
+  signInWithGoogle,
+} from "../utils/googleAuth";
 
 export default function Signup() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ ref?: string; referralCode?: string }>();
+  const { login } = useAuth();
 
   const [showForm, setShowForm] = useState(false);
 
@@ -32,6 +41,7 @@ export default function Signup() {
   const [showPassword, setShowPassword] = useState(false);
 
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState("");
 
   const passwordChecks = useMemo(() => {
@@ -45,6 +55,30 @@ export default function Signup() {
   }, [password]);
 
   const isStrongPassword = Object.values(passwordChecks).every(Boolean);
+
+  useEffect(() => {
+    const applyReferralCode = async () => {
+      const incomingReferral = String(
+        params.ref || params.referralCode || ""
+      )
+        .trim()
+        .toUpperCase();
+
+      if (incomingReferral) {
+        setReferralCode(incomingReferral);
+        setShowForm(true);
+        return;
+      }
+
+      const storedReferralCode = await getStoredReferralCode();
+      if (storedReferralCode) {
+        setReferralCode(storedReferralCode);
+        setShowForm(true);
+      }
+    };
+
+    applyReferralCode();
+  }, [params.ref, params.referralCode]);
 
   const formatPhone = (value: string) => {
     let digits = value.replace(/\D/g, "");
@@ -83,6 +117,8 @@ export default function Signup() {
         referralCode: referralCode.trim(),
       });
 
+      await clearStoredReferralCode();
+
       router.push({
         pathname: "/verify-email",
         params: {
@@ -96,6 +132,38 @@ export default function Signup() {
       setError(err?.response?.data?.message || "Signup failed.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoogleSignup = async () => {
+    try {
+      setGoogleLoading(true);
+      setError("");
+
+      const userInfo = await signInWithGoogle();
+      const googleUser = mapGoogleUser(userInfo);
+
+      if (!googleUser.email) {
+        setError("Google sign-in did not return an email address.");
+        return;
+      }
+
+      const res = await api.post("/auth/google", {
+        email: googleUser.email,
+        firstName: googleUser.firstName,
+        lastName: googleUser.lastName,
+        referralCode: referralCode.trim(),
+      });
+
+      await clearStoredReferralCode();
+      await login(res.data.token);
+    } catch (err: any) {
+      console.log("GOOGLE SIGNUP FAILED:", err?.response?.data || err?.message || err);
+      setError(
+        err?.response?.data?.message || getGoogleSignInErrorMessage(err)
+      );
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
@@ -124,6 +192,18 @@ export default function Signup() {
             onPress={() => setShowForm(true)}
           >
             <Text style={styles.primaryText}>Sign Up</Text>
+          </Pressable>
+
+          <Pressable
+            style={[styles.googleButton, googleLoading && styles.googleButtonDisabled]}
+            onPress={handleGoogleSignup}
+            disabled={googleLoading}
+          >
+            {googleLoading ? (
+              <ActivityIndicator color="#111827" />
+            ) : (
+              <Text style={styles.googleButtonText}>Continue with Google</Text>
+            )}
           </Pressable>
 
           <Link href="/login" asChild>
@@ -226,6 +306,18 @@ export default function Signup() {
               )}
             </Pressable>
 
+            <Pressable
+              style={[styles.googleButton, googleLoading && styles.googleButtonDisabled]}
+              onPress={handleGoogleSignup}
+              disabled={googleLoading}
+            >
+              {googleLoading ? (
+                <ActivityIndicator color="#111827" />
+              ) : (
+                <Text style={styles.googleButtonText}>Continue with Google</Text>
+              )}
+            </Pressable>
+
           </ScrollView>
         </View>
       </TouchableWithoutFeedback>
@@ -284,6 +376,22 @@ const styles = StyleSheet.create({
 
   primaryButton: { backgroundColor: "#4F46E5", padding: 14, borderRadius: 10 },
   primaryText: { color: "#fff", textAlign: "center", fontWeight: "600" },
+  googleButton: {
+    marginTop: 12,
+    backgroundColor: "#FFFFFF",
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+  },
+  googleButtonDisabled: {
+    opacity: 0.7,
+  },
+  googleButtonText: {
+    color: "#111827",
+    textAlign: "center",
+    fontWeight: "600",
+  },
 
   link: { color: "#4F46E5", fontWeight: "600" },
 
