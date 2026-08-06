@@ -9,6 +9,7 @@ import {
   sendPasswordResetCodeEmail,
   sendVerificationCodeEmail,
 } from "./lib/mailer.js";
+import { refundReservedCredits, reserveCredits } from "./lib/credits.js";
 import { getOpenAI } from "./lib/openai.js";
 import { authenticateUser } from "./middleware/auth.js";
 import { creditGuard } from "./middleware/creditGuard.js";
@@ -1636,6 +1637,82 @@ Occasion guidance: ${getCategoryGuidance(category)}`,
     } catch (error) {
       console.error("Card text generation error:", error);
       return handleAiRouteError(res, error, "Card text generation failed");
+    }
+  }
+);
+
+app.post(
+  "/generate-card-template",
+  authenticateUser,
+  paidPlanGuard,
+  async (req, res) => {
+    const creditCost = 5;
+    let reservation = null;
+
+    try {
+      const category = String(req.body?.category || "Special occasion").trim().slice(0, 80);
+      const tone = String(req.body?.tone || "Neutral").trim().slice(0, 60);
+      const description = String(req.body?.description || "").trim().slice(0, 500);
+      const requestedSize = String(req.body?.cardSize || "portrait").toLowerCase();
+      const imageSizes = {
+        portrait: "1024x1280",
+        square: "1024x1024",
+        story: "1024x1824",
+      };
+      const imageSize = imageSizes[requestedSize] || imageSizes.portrait;
+
+      reservation = await reserveCredits(req.user.id, creditCost);
+
+      if (reservation.status === "missing") {
+        return res.status(401).json({ error: "User not found" });
+      }
+
+      if (reservation.status === "insufficient") {
+        return res.status(402).json({
+          error: `You need at least ${creditCost} credits to generate an AI template.`,
+          requiredCredits: creditCost,
+        });
+      }
+
+      const openai = getOpenAI();
+      const result = await openai.images.generate({
+        model: process.env.OPENAI_IMAGE_MODEL || "gpt-image-2",
+        quality: "medium",
+        size: imageSize,
+        prompt: `Create an elegant, original greeting-card background for ${category}.
+
+Visual mood: ${tone}.
+${description ? `User's design direction: ${description}.` : "Use tasteful, contemporary visual styling appropriate to the occasion."}
+
+The image will be used behind editable text in a mobile greeting-card app. Preserve calm, uncluttered negative space in the central area for a headline and short message. Place decorative detail mainly around the edges. Use strong visual hierarchy, beautiful lighting, polished colors, and a premium card-design finish.
+
+Do not include any words, letters, numbers, typography, logos, signatures, watermarks, borders, UI elements, or mockup frames. Produce only the finished background artwork.`,
+      });
+
+      const imageBase64 = result.data?.[0]?.b64_json;
+      if (!imageBase64) {
+        throw new Error("The image service did not return template artwork.");
+      }
+
+      return res.json({
+        imageBase64,
+        mimeType: "image/png",
+        remainingCredits: reservation.remainingCredits,
+        creditCost,
+      });
+    } catch (error) {
+      if (reservation?.status === "reserved") {
+        try {
+          await refundReservedCredits(req.user.id, reservation);
+        } catch (refundError) {
+          console.error("AI template credit refund error:", refundError);
+        }
+      }
+
+      console.error("AI card template generation error:", error);
+      return res.status(500).json({
+        error: "Unable to generate a template right now. Your credits were not charged.",
+      });
     }
   }
 );

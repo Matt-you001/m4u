@@ -6,6 +6,7 @@ export type GreetingCardDraft = {
   message: string;
   category: string;
   tone: string;
+  context?: string;
   recipientName?: string;
   senderName?: string;
   language?: string;

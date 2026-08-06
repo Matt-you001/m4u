@@ -489,7 +489,7 @@ export default function GenerateScreen() {
     }
   };
 
-  const openGreetingCardStudio = async () => {
+  const openGeneratedMessageAsCard = async () => {
     if (!result.trim() || mode !== 'individual') return;
 
     if (plan === 'free') {
@@ -501,6 +501,34 @@ export default function GenerateScreen() {
       message: result.trim(),
       category: finalCategory,
       tone: finalTone,
+      context: context.trim(),
+      recipientName: recipientName.trim(),
+      senderName: senderName.trim(),
+      language: finalLanguage,
+    });
+    router.push('/greeting-card');
+  };
+
+  const createCardDirectly = async () => {
+    if (mode !== 'individual') return;
+
+    if (plan === 'free') {
+      router.push('/upgrade');
+      return;
+    }
+
+    const validationError = validateIndividualForm();
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
+    setError('');
+    await saveGreetingCardDraft({
+      message: '',
+      category: finalCategory,
+      tone: finalTone,
+      context: context.trim(),
       recipientName: recipientName.trim(),
       senderName: senderName.trim(),
       language: finalLanguage,
@@ -967,15 +995,43 @@ export default function GenerateScreen() {
 
         {!!error && <Text style={styles.errorText}>{error}</Text>}
 
-        <TouchableOpacity
-          style={styles.primaryButton}
-          onPress={generateMessage}
-          disabled={loading}
-        >
-          <Text style={styles.primaryText}>
-            {loading ? 'Generating...' : 'Generate Message'}
-          </Text>
-        </TouchableOpacity>
+        {mode === 'individual' ? (
+          <View style={styles.creationActions}>
+            <TouchableOpacity
+              style={[styles.primaryButton, styles.creationActionButton]}
+              onPress={generateMessage}
+              disabled={loading}
+            >
+              <Ionicons name="chatbubble-ellipses-outline" size={19} color="#FFFFFF" />
+              <Text style={styles.creationActionText}>
+                {loading ? 'Generating...' : 'Generate Message'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.cardChoiceButton, styles.creationActionButton]}
+              onPress={createCardDirectly}
+              disabled={loading}
+            >
+              <Ionicons
+                name={plan === 'free' ? 'lock-closed-outline' : 'image-outline'}
+                size={19}
+                color="#4338CA"
+              />
+              <Text style={styles.cardChoiceButtonText}>Create a Card</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={generateMessage}
+            disabled={loading}
+          >
+            <Text style={styles.primaryText}>
+              {loading ? 'Generating...' : 'Generate Message'}
+            </Text>
+          </TouchableOpacity>
+        )}
 
           {!!result && (
             <View style={styles.resultCard}>
@@ -990,7 +1046,7 @@ export default function GenerateScreen() {
               {mode === 'individual' && (
                 <TouchableOpacity
                   style={styles.cardStudioButton}
-                  onPress={openGreetingCardStudio}
+                  onPress={openGeneratedMessageAsCard}
                 >
                   <Ionicons
                     name={plan === 'free' ? 'lock-closed-outline' : 'image-outline'}
@@ -998,7 +1054,7 @@ export default function GenerateScreen() {
                     color="#FFFFFF"
                   />
                   <Text style={styles.cardStudioButtonText}>
-                    {plan === 'free' ? 'Unlock Greeting Cards' : 'Create Greeting Card'}
+                    Create a Card
                   </Text>
                 </TouchableOpacity>
               )}
@@ -1230,6 +1286,41 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 16,
+  },
+  creationActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 10,
+  },
+  creationActionButton: {
+    flex: 1,
+    minHeight: 58,
+    marginTop: 0,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+  },
+  creationActionText: {
+    flexShrink: 1,
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  cardChoiceButton: {
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#4F46E5',
+    backgroundColor: '#EEF2FF',
+  },
+  cardChoiceButtonText: {
+    flexShrink: 1,
+    color: '#4338CA',
+    fontSize: 14,
+    fontWeight: '900',
+    textAlign: 'center',
   },
   resultCard: {
     backgroundColor: 'rgba(255,255,255,0.9)',
