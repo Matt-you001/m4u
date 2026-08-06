@@ -43,6 +43,15 @@ CREATE TABLE public.users (
     CONSTRAINT plan_check CHECK (((plan)::text = ANY ((ARRAY['free'::character varying, 'basic'::character varying, 'premium'::character varying])::text[])))
 );
 
+CREATE TABLE public.revenuecat_webhook_events (
+    event_id text NOT NULL,
+    event_type text NOT NULL,
+    processed_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+ALTER TABLE ONLY public.revenuecat_webhook_events
+    ADD CONSTRAINT revenuecat_webhook_events_pkey PRIMARY KEY (event_id);
+
 
 --
 -- Name: users_id_seq; Type: SEQUENCE; Schema: public; Owner: -

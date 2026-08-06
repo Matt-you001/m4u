@@ -65,6 +65,7 @@ export async function sendFeedbackEmail({
   email,
   plan,
   category,
+  rating,
   message,
 }) {
   assertMailerConfig();
@@ -88,8 +89,11 @@ export async function sendFeedbackEmail({
         <p><strong>Email:</strong> ${email}</p>
         <p><strong>Plan:</strong> ${plan}</p>
         <p><strong>Category:</strong> ${category || "General"}</p>
+        <p><strong>Rating:</strong> ${rating}/5 stars</p>
         <hr style="margin: 20px 0; border: none; border-top: 1px solid #E5E7EB;" />
-        <p style="white-space: pre-wrap;">${String(message || "").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>
+        <p style="white-space: pre-wrap;">${message
+          ? String(message).replace(/</g, "&lt;").replace(/>/g, "&gt;")
+          : "No written feedback provided."}</p>
       </div>
     `,
   });

@@ -4,6 +4,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { ImageSourcePropType, ImageStyle, TextStyle, ViewStyle } from "react-native";
 import {
   ActivityIndicator,
   Alert,
@@ -18,7 +19,6 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import type { ImageStyle, TextStyle, ViewStyle } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { captureRef } from "react-native-view-shot";
 import BrandedBackdrop from "../components/BrandedBackdrop";
@@ -65,6 +65,14 @@ type TemplateId =
   | "ocean"
   | "celebration"
   | "monochrome";
+type TemplateCategory = "designed" | "life";
+type LifeTemplateId =
+  | "coffee"
+  | "wildlife"
+  | "garden"
+  | "city"
+  | "seaside"
+  | "mountains";
 type PaidPlan = "basic" | "premium";
 
 type CardTextStyle = {
@@ -561,6 +569,71 @@ const TEMPLATES: {
   },
 ];
 
+const LIFE_TEMPLATES: {
+  id: LifeTemplateId;
+  label: string;
+  detail: string;
+  image: ImageSourcePropType;
+  overlayColors: readonly [string, string, ...string[]];
+  accentColor: string;
+  defaultTextStyle: CardTextStyleId;
+}[] = [
+  {
+    id: "coffee",
+    label: "Coffee Moment",
+    detail: "Warm everyday calm",
+    image: require("../assets/card-templates/life-coffee.png"),
+    overlayColors: ["rgba(48,30,14,0.08)", "rgba(30,18,10,0.62)"],
+    accentColor: "#F4C98B",
+    defaultTextStyle: "typewriter",
+  },
+  {
+    id: "wildlife",
+    label: "Wildlife",
+    detail: "Open and uplifting",
+    image: require("../assets/card-templates/life-wildlife.png"),
+    overlayColors: ["rgba(58,38,11,0.04)", "rgba(30,20,8,0.58)"],
+    accentColor: "#F6D58A",
+    defaultTextStyle: "cinematic",
+  },
+  {
+    id: "garden",
+    label: "Beautiful Garden",
+    detail: "Soft floral beauty",
+    image: require("../assets/card-templates/life-garden.png"),
+    overlayColors: ["rgba(35,52,24,0.04)", "rgba(35,24,44,0.58)"],
+    accentColor: "#F9C5D5",
+    defaultTextStyle: "poetic",
+  },
+  {
+    id: "city",
+    label: "City Life",
+    detail: "Modern evening energy",
+    image: require("../assets/card-templates/life-city.png"),
+    overlayColors: ["rgba(4,12,38,0.08)", "rgba(2,7,24,0.68)"],
+    accentColor: "#F9C66B",
+    defaultTextStyle: "modern",
+  },
+  {
+    id: "seaside",
+    label: "Seaside",
+    detail: "Bright and peaceful",
+    image: require("../assets/card-templates/life-seaside.png"),
+    overlayColors: ["rgba(11,50,72,0.04)", "rgba(7,35,53,0.54)"],
+    accentColor: "#BAF3F7",
+    defaultTextStyle: "soft",
+  },
+  {
+    id: "mountains",
+    label: "Mountain Escape",
+    detail: "Quiet and reflective",
+    image: require("../assets/card-templates/life-mountains.png"),
+    overlayColors: ["rgba(13,31,47,0.04)", "rgba(7,20,33,0.62)"],
+    accentColor: "#D7E9F2",
+    defaultTextStyle: "heritage",
+  },
+];
+
 function getDefaultHeadline(category: string) {
   const normalized = category.trim().toLowerCase();
   const headlines: Record<string, string> = {
@@ -702,7 +775,9 @@ export default function GreetingCardScreen() {
   const [checkingAccess, setCheckingAccess] = useState(true);
   const [textMode, setTextMode] = useState<CardTextMode>("short");
   const [cardSize, setCardSize] = useState<CardSize>("portrait");
+  const [templateCategory, setTemplateCategory] = useState<TemplateCategory>("designed");
   const [templateId, setTemplateId] = useState<TemplateId>("bloom");
+  const [lifeTemplateId, setLifeTemplateId] = useState<LifeTemplateId | null>(null);
   const [textStyleId, setTextStyleId] = useState<CardTextStyleId>("romantic");
   const [customPhotoUri, setCustomPhotoUri] = useState("");
   const [localAiTemplates, setLocalAiTemplates] = useState<LocalAiTemplate[]>([]);
@@ -779,21 +854,29 @@ export default function GreetingCardScreen() {
     () => CARD_TEXT_STYLES.find((item) => item.id === textStyleId) || CARD_TEXT_STYLES[0],
     [textStyleId]
   );
+  const selectedLifeTemplate = useMemo(
+    () => LIFE_TEMPLATES.find((item) => item.id === lifeTemplateId) || null,
+    [lifeTemplateId]
+  );
   const selectedAiTemplate = useMemo(
     () => localAiTemplates.find((item) => item.id === selectedAiTemplateId) || null,
     [localAiTemplates, selectedAiTemplateId]
   );
-  const backgroundImageUri = selectedAiTemplate?.uri || customPhotoUri;
+  const backgroundImageSource: ImageSourcePropType | null = selectedLifeTemplate?.image
+    || (selectedAiTemplate?.uri ? { uri: selectedAiTemplate.uri } : null)
+    || (customPhotoUri ? { uri: customPhotoUri } : null);
+  const hasImageBackground = Boolean(backgroundImageSource);
   const previewWidth = Math.min(width - 40, 390);
   const previewHeight = previewWidth / selectedSize.aspectRatio;
   const activeHeadline = textMode === "short" ? shortHeadline : longHeadline;
   const activeBody = textMode === "short" ? shortBody : longBody;
   const hasCardCopy = Boolean(activeHeadline.trim() && activeBody.trim());
   const hasBasicWatermark = accessPlan === "basic";
-  const activeTextColor = backgroundImageUri ? "#FFFFFF" : selectedTemplate.textColor;
-  const activeSoftTextColor = backgroundImageUri
+  const activeTextColor = hasImageBackground ? "#FFFFFF" : selectedTemplate.textColor;
+  const activeSoftTextColor = hasImageBackground
     ? "rgba(255,255,255,0.88)"
     : selectedTemplate.softTextColor;
+  const activeAccentColor = selectedLifeTemplate?.accentColor || selectedTemplate.accentColor;
   const textAlignment = selectedTextStyle.alignment;
   const copyAlignment =
     textAlignment === "left"
@@ -887,6 +970,7 @@ export default function GreetingCardScreen() {
     });
 
     if (!result.canceled && result.assets[0]?.uri) {
+      setLifeTemplateId(null);
       setSelectedAiTemplateId("");
       setCustomPhotoUri(result.assets[0].uri);
     }
@@ -922,6 +1006,7 @@ export default function GreetingCardScreen() {
         cardSize,
       });
       setLocalAiTemplates(saved.templates);
+      setLifeTemplateId(null);
       setSelectedAiTemplateId(saved.template.id);
       setCustomPhotoUri("");
 
@@ -1045,9 +1130,6 @@ export default function GreetingCardScreen() {
           <View style={styles.headingWrap}>
             <Text style={styles.eyebrow}>MESSAGE4U CARD STUDIO</Text>
             <Text style={styles.title}>Turn the moment into a card.</Text>
-            <Text style={styles.subtitle}>
-              Choose concise card copy or reuse your full message, then make the design yours.
-            </Text>
           </View>
 
           <View style={styles.modeTabs}>
@@ -1096,143 +1178,6 @@ export default function GreetingCardScreen() {
               </Text>
             </TouchableOpacity>
           )}
-
-          <View style={[styles.previewShell, { width: previewWidth }]}> 
-            <View
-              ref={cardRef}
-              collapsable={false}
-              style={[
-                styles.cardCanvas,
-                { width: previewWidth, height: previewHeight },
-              ]}
-            >
-              {!!backgroundImageUri && (
-                <Image
-                  source={{ uri: backgroundImageUri }}
-                  resizeMode="cover"
-                  style={StyleSheet.absoluteFill}
-                />
-              )}
-              <LinearGradient
-                colors={
-                  backgroundImageUri
-                    ? ["rgba(17,24,39,0.08)", "rgba(17,24,39,0.62)"]
-                    : selectedTemplate.colors
-                }
-                start={{ x: 0.05, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={StyleSheet.absoluteFill}
-              />
-              {!backgroundImageUri && <CardDecorations template={templateId} />}
-              <View style={styles.cardInner}>
-                <View
-                  style={[
-                    styles.cardTopLine,
-                    { alignItems: copyAlignment as ViewStyle["alignItems"] },
-                  ]}
-                >
-                  {!!recipientName.trim() && (
-                    <Text
-                      style={[
-                        styles.recipientText,
-                        selectedTextStyle.recipient,
-                        { textAlign: textAlignment },
-                        { color: activeSoftTextColor },
-                      ]}
-                    >
-                      FOR {recipientName.trim().toUpperCase()}
-                    </Text>
-                  )}
-                </View>
-
-                <View
-                  style={[
-                    styles.cardCopyWrap,
-                    {
-                      alignItems: copyAlignment as ViewStyle["alignItems"],
-                      justifyContent: selectedTextStyle.verticalPosition,
-                    },
-                    selectedTextStyle.panel && styles.cardCopyPanel,
-                    selectedTextStyle.panel && {
-                      backgroundColor: backgroundImageUri
-                        ? "rgba(15,23,42,0.34)"
-                        : "rgba(255,255,255,0.24)",
-                    },
-                  ]}
-                >
-                  <Text
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.65}
-                    numberOfLines={3}
-                    style={[
-                      styles.cardHeadline,
-                      selectedTextStyle.headline,
-                      {
-                        color: activeTextColor,
-                        textAlign: textAlignment,
-                        fontSize: headlineFontSize * headlineScale,
-                        lineHeight: headlineLineHeight * headlineScale,
-                      },
-                    ]}
-                  >
-                    {activeHeadline.trim() || "Your card headline"}
-                  </Text>
-                  {selectedTextStyle.accent !== "none" && (
-                    <View
-                      style={[
-                        styles.accentLine,
-                        selectedTextStyle.accent === "dot" && styles.accentDot,
-                        selectedTextStyle.accent === "bar" && styles.accentBar,
-                        {
-                          alignSelf: copyAlignment as ViewStyle["alignSelf"],
-                          backgroundColor: selectedTemplate.accentColor,
-                        },
-                      ]}
-                    />
-                  )}
-                  <Text
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.58}
-                    numberOfLines={textMode === "short" ? 6 : 14}
-                    style={[
-                      styles.cardBody,
-                      selectedTextStyle.body,
-                      {
-                        color: activeTextColor,
-                        textAlign: textAlignment,
-                        fontSize: bodyFontSize * bodyScale,
-                        lineHeight: bodyLineHeight * bodyScale,
-                      },
-                    ]}
-                  >
-                    {activeBody.trim() || "Generate short text or choose Long Text."}
-                  </Text>
-                </View>
-
-                <View style={styles.cardFooter}>
-                  <Text
-                    style={[
-                      styles.senderText,
-                      selectedTextStyle.body,
-                      {
-                        textAlign: textAlignment,
-                        fontSize: Math.min(bodyFontSize * 0.62, 13),
-                        lineHeight: 17,
-                      },
-                      { color: activeSoftTextColor },
-                    ]}
-                  >
-                    {senderName.trim() ? `- ${senderName.trim()}` : ""}
-                  </Text>
-                  {hasBasicWatermark && (
-                    <View style={styles.watermarkPill}>
-                      <Text style={styles.watermarkText}>Made with Message4U</Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-            </View>
-          </View>
 
           <View style={styles.editorCard}>
             <Text style={styles.sectionTitle}>Card wording</Text>
@@ -1287,147 +1232,265 @@ export default function GreetingCardScreen() {
             </View>
           </View>
 
-          <View style={styles.editorCard}>
-            <Text style={styles.sectionTitle}>Choose a look</Text>
-            <View style={styles.aiStudio}>
-              <View style={styles.aiStudioHeading}>
-                <View style={styles.aiIconWrap}>
-                  <Ionicons name="sparkles" size={18} color="#FFFFFF" />
+          <View style={[styles.previewShell, { width: previewWidth }]}> 
+            <View
+              ref={cardRef}
+              collapsable={false}
+              style={[
+                styles.cardCanvas,
+                { width: previewWidth, height: previewHeight },
+              ]}
+            >
+              {!!backgroundImageSource && (
+                <Image
+                  source={backgroundImageSource}
+                  resizeMode="cover"
+                  style={StyleSheet.absoluteFill}
+                />
+              )}
+              <LinearGradient
+                colors={
+                  selectedLifeTemplate?.overlayColors
+                    || (hasImageBackground
+                    ? ["rgba(17,24,39,0.08)", "rgba(17,24,39,0.62)"]
+                    : selectedTemplate.colors
+                    )
+                }
+                start={{ x: 0.05, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
+              {!hasImageBackground && <CardDecorations template={templateId} />}
+              <View style={styles.cardInner}>
+                <View
+                  style={[
+                    styles.cardTopLine,
+                    { alignItems: copyAlignment as ViewStyle["alignItems"] },
+                  ]}
+                >
+                  {!!recipientName.trim() && (
+                    <Text
+                      style={[
+                        styles.recipientText,
+                        selectedTextStyle.recipient,
+                        { textAlign: textAlignment },
+                        { color: activeSoftTextColor },
+                      ]}
+                    >
+                      FOR {recipientName.trim().toUpperCase()}
+                    </Text>
+                  )}
                 </View>
-                <View style={styles.aiStudioCopy}>
-                  <Text style={styles.aiStudioTitle}>Generate an AI template</Text>
-                  <Text style={styles.aiStudioDetail}>
-                    Create original background art. Your card text stays editable.
+
+                <View
+                  style={[
+                    styles.cardCopyWrap,
+                    {
+                      alignItems: copyAlignment as ViewStyle["alignItems"],
+                      justifyContent: selectedTextStyle.verticalPosition,
+                    },
+                    selectedTextStyle.panel && styles.cardCopyPanel,
+                    selectedTextStyle.panel && {
+                      backgroundColor: hasImageBackground
+                        ? "rgba(15,23,42,0.34)"
+                        : "rgba(255,255,255,0.24)",
+                    },
+                  ]}
+                >
+                  <Text
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.65}
+                    numberOfLines={3}
+                    style={[
+                      styles.cardHeadline,
+                      selectedTextStyle.headline,
+                      {
+                        color: activeTextColor,
+                        textAlign: textAlignment,
+                        fontSize: headlineFontSize * headlineScale,
+                        lineHeight: headlineLineHeight * headlineScale,
+                      },
+                    ]}
+                  >
+                    {activeHeadline.trim() || "Your card headline"}
+                  </Text>
+                  {selectedTextStyle.accent !== "none" && (
+                    <View
+                      style={[
+                        styles.accentLine,
+                        selectedTextStyle.accent === "dot" && styles.accentDot,
+                        selectedTextStyle.accent === "bar" && styles.accentBar,
+                        {
+                          alignSelf: copyAlignment as ViewStyle["alignSelf"],
+                          backgroundColor: activeAccentColor,
+                        },
+                      ]}
+                    />
+                  )}
+                  <Text
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.58}
+                    numberOfLines={textMode === "short" ? 6 : 14}
+                    style={[
+                      styles.cardBody,
+                      selectedTextStyle.body,
+                      {
+                        color: activeTextColor,
+                        textAlign: textAlignment,
+                        fontSize: bodyFontSize * bodyScale,
+                        lineHeight: bodyLineHeight * bodyScale,
+                      },
+                    ]}
+                  >
+                    {activeBody.trim() || "Generate short text or choose Long Text."}
                   </Text>
                 </View>
+
+                <View style={styles.cardFooter}>
+                  <Text
+                    style={[
+                      styles.senderText,
+                      selectedTextStyle.body,
+                      {
+                        textAlign: textAlignment,
+                        fontSize: Math.min(bodyFontSize * 0.62, 13),
+                        lineHeight: 17,
+                      },
+                      { color: activeSoftTextColor },
+                    ]}
+                  >
+                    {senderName.trim() ? `- ${senderName.trim()}` : ""}
+                  </Text>
+                  {hasBasicWatermark && (
+                    <View style={styles.watermarkPill}>
+                      <Text style={styles.watermarkText}>Made with Message4U</Text>
+                    </View>
+                  )}
+                </View>
               </View>
-              <TextInput
-                value={aiPrompt}
-                onChangeText={setAiPrompt}
-                placeholder="Describe the look, e.g. soft roses at sunrise"
-                placeholderTextColor="#8B91A0"
-                multiline
-                maxLength={500}
-                style={[styles.input, styles.aiPromptInput]}
-              />
+            </View>
+          </View>
+
+          <View style={styles.editorCard}>
+            <Text style={styles.sectionTitle}>Choose a look</Text>
+
+            <Text style={styles.orDivider}>TEMPLATE LIBRARY</Text>
+            <View style={styles.templateCategoryTabs}>
               <TouchableOpacity
                 style={[
-                  styles.generateTemplateButton,
-                  generatingTemplate && styles.buttonDisabled,
+                  styles.templateCategoryButton,
+                  templateCategory === "designed" && styles.templateCategoryButtonActive,
                 ]}
-                onPress={generateAiTemplate}
-                disabled={generatingTemplate}
-              >
-                {generatingTemplate ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <Ionicons name="color-wand-outline" size={19} color="#FFFFFF" />
-                )}
-                <Text style={styles.generateTemplateText}>
-                  {generatingTemplate ? "Creating artwork..." : "Generate Template - 5 credits"}
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {!!localAiTemplates.length && (
-              <View style={styles.libraryWrap}>
-                <View style={styles.libraryHeading}>
-                  <Text style={styles.libraryTitle}>My AI Templates</Text>
-                  <Text style={styles.libraryCount}>{localAiTemplates.length} saved</Text>
-                </View>
-                <Text style={styles.libraryDetail}>
-                  Reuse saved templates for free. They are stored only on this device.
-                </Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.libraryRow}
-                >
-                  {localAiTemplates.map((template) => (
-                    <TouchableOpacity
-                      key={template.id}
-                      style={[
-                        styles.aiTemplateChoice,
-                        selectedAiTemplateId === template.id && styles.choiceActive,
-                      ]}
-                      onPress={() => {
-                        setSelectedAiTemplateId(template.id);
-                        setCustomPhotoUri("");
-                        if (template.cardSize !== cardSize) setCardSize(template.cardSize);
-                      }}
-                      onLongPress={() => removeAiTemplate(template)}
-                    >
-                      <Image
-                        source={{ uri: template.uri }}
-                        style={styles.aiTemplateImage as ImageStyle}
-                      />
-                      <Text numberOfLines={1} style={styles.aiTemplateLabel}>
-                        {template.prompt}
-                      </Text>
-                      <TouchableOpacity
-                        accessibilityLabel="Delete saved template"
-                        style={styles.deleteTemplateButton}
-                        onPress={() => removeAiTemplate(template)}
-                      >
-                        <Ionicons name="trash-outline" size={14} color="#FFFFFF" />
-                      </TouchableOpacity>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-            )}
-
-            <View style={styles.photoRow}>
-              <View style={styles.photoCopy}>
-                <Text style={styles.photoTitle}>Personal photo</Text>
-                <Text style={styles.photoDetail}>
-                  Use one photo as the full card background.
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={styles.photoButton}
-                onPress={customPhotoUri ? () => setCustomPhotoUri("") : chooseBackgroundPhoto}
+                onPress={() => setTemplateCategory("designed")}
               >
                 <Ionicons
-                  name={customPhotoUri ? "close-outline" : "images-outline"}
-                  size={18}
-                  color="#4338CA"
+                  name="color-palette-outline"
+                  size={17}
+                  color={templateCategory === "designed" ? "#FFFFFF" : "#4B5563"}
                 />
-                <Text style={styles.photoButtonText}>
-                  {customPhotoUri ? "Remove" : "Choose"}
+                <Text
+                  style={[
+                    styles.templateCategoryText,
+                    templateCategory === "designed" && styles.templateCategoryTextActive,
+                  ]}
+                >
+                  Designed
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.templateCategoryButton,
+                  templateCategory === "life" && styles.templateCategoryButtonActive,
+                ]}
+                onPress={() => setTemplateCategory("life")}
+              >
+                <Ionicons
+                  name="camera-outline"
+                  size={17}
+                  color={templateCategory === "life" ? "#FFFFFF" : "#4B5563"}
+                />
+                <Text
+                  style={[
+                    styles.templateCategoryText,
+                    templateCategory === "life" && styles.templateCategoryTextActive,
+                  ]}
+                >
+                  Life Images
                 </Text>
               </TouchableOpacity>
             </View>
-            <Text style={styles.orDivider}>OR USE A TEMPLATE</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.templateRow}
-            >
-              {TEMPLATES.map((template) => (
-                <TouchableOpacity
-                  key={template.id}
-                  style={[
-                    styles.templateChoice,
-                    !backgroundImageUri &&
-                      templateId === template.id &&
-                      styles.choiceActive,
-                  ]}
-                  onPress={() => {
-                    setTemplateId(template.id);
-                    setTextStyleId(template.defaultTextStyle);
-                    setSelectedAiTemplateId("");
-                    setCustomPhotoUri("");
-                  }}
-                >
-                  <LinearGradient
-                    colors={template.colors}
-                    style={styles.templateSwatch}
-                  />
-                  <Text style={styles.templateLabel}>{template.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+            <Text style={styles.templateCategoryDetail}>
+              {templateCategory === "life"
+                ? "Real-life scenes with space reserved for your greeting."
+                : "Illustrated colors and decorative layouts created in the app."}
+            </Text>
+
+            {templateCategory === "designed" ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.templateRow}
+              >
+                {TEMPLATES.map((template) => (
+                  <TouchableOpacity
+                    key={template.id}
+                    style={[
+                      styles.templateChoice,
+                      !hasImageBackground &&
+                        templateId === template.id &&
+                        styles.choiceActive,
+                    ]}
+                    onPress={() => {
+                      setTemplateId(template.id);
+                      setTextStyleId(template.defaultTextStyle);
+                      setLifeTemplateId(null);
+                      setSelectedAiTemplateId("");
+                      setCustomPhotoUri("");
+                    }}
+                  >
+                    <LinearGradient
+                      colors={template.colors}
+                      style={styles.templateSwatch}
+                    />
+                    <Text style={styles.templateLabel}>{template.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.templateRow}
+              >
+                {LIFE_TEMPLATES.map((template) => (
+                  <TouchableOpacity
+                    key={template.id}
+                    style={[
+                      styles.lifeTemplateChoice,
+                      lifeTemplateId === template.id && styles.choiceActive,
+                    ]}
+                    onPress={() => {
+                      setLifeTemplateId(template.id);
+                      setTextStyleId(template.defaultTextStyle);
+                      setSelectedAiTemplateId("");
+                      setCustomPhotoUri("");
+                    }}
+                  >
+                    <Image
+                      source={template.image}
+                      resizeMode="cover"
+                      style={styles.lifeTemplateImage as ImageStyle}
+                    />
+                    <Text numberOfLines={1} style={styles.lifeTemplateLabel}>
+                      {template.label}
+                    </Text>
+                    <Text numberOfLines={1} style={styles.lifeTemplateDetail}>
+                      {template.detail}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
 
             <View style={styles.typographyHeading}>
               <Text style={styles.sectionTitle}>Text style</Text>
@@ -1471,6 +1534,114 @@ export default function GreetingCardScreen() {
                 </TouchableOpacity>
               ))}
             </ScrollView>
+
+            <View style={styles.aiStudio}>
+              <View style={styles.aiStudioHeading}>
+                <View style={styles.aiIconWrap}>
+                  <Ionicons name="sparkles" size={18} color="#FFFFFF" />
+                </View>
+                <View style={styles.aiStudioCopy}>
+                  <Text style={styles.aiStudioTitle}>Generate an AI template</Text>
+                </View>
+              </View>
+              <TextInput
+                value={aiPrompt}
+                onChangeText={setAiPrompt}
+                placeholder="Describe the look, e.g. soft roses at sunrise"
+                placeholderTextColor="#8B91A0"
+                multiline
+                maxLength={500}
+                style={[styles.input, styles.aiPromptInput]}
+              />
+              <TouchableOpacity
+                style={[
+                  styles.generateTemplateButton,
+                  generatingTemplate && styles.buttonDisabled,
+                ]}
+                onPress={generateAiTemplate}
+                disabled={generatingTemplate}
+              >
+                {generatingTemplate ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Ionicons name="color-wand-outline" size={19} color="#FFFFFF" />
+                )}
+                <Text style={styles.generateTemplateText}>
+                  {generatingTemplate ? "Creating artwork..." : "Generate Template - 5 credits"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {!!localAiTemplates.length && (
+              <View style={styles.libraryWrap}>
+                <View style={styles.libraryHeading}>
+                  <Text style={styles.libraryTitle}>My AI Templates</Text>
+                  <Text style={styles.libraryCount}>{localAiTemplates.length} saved</Text>
+                </View>
+                <Text style={styles.libraryDetail}>
+                  Reuse saved templates for free.
+                </Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.libraryRow}
+                >
+                  {localAiTemplates.map((template) => (
+                    <TouchableOpacity
+                      key={template.id}
+                      style={[
+                        styles.aiTemplateChoice,
+                        selectedAiTemplateId === template.id && styles.choiceActive,
+                      ]}
+                      onPress={() => {
+                        setLifeTemplateId(null);
+                        setSelectedAiTemplateId(template.id);
+                        setCustomPhotoUri("");
+                        if (template.cardSize !== cardSize) setCardSize(template.cardSize);
+                      }}
+                      onLongPress={() => removeAiTemplate(template)}
+                    >
+                      <Image
+                        source={{ uri: template.uri }}
+                        style={styles.aiTemplateImage as ImageStyle}
+                      />
+                      <Text numberOfLines={1} style={styles.aiTemplateLabel}>
+                        {template.prompt}
+                      </Text>
+                      <TouchableOpacity
+                        accessibilityLabel="Delete saved template"
+                        style={styles.deleteTemplateButton}
+                        onPress={() => removeAiTemplate(template)}
+                      >
+                        <Ionicons name="trash-outline" size={14} color="#FFFFFF" />
+                      </TouchableOpacity>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            <View style={styles.photoRow}>
+              <View style={styles.photoCopy}>
+                <Text style={styles.photoTitle}>Personal photo</Text>
+                <Text style={styles.photoDetail}>
+                  Use a photo as a card background.
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.photoButton}
+                onPress={customPhotoUri ? () => setCustomPhotoUri("") : chooseBackgroundPhoto}
+              >
+                <Ionicons
+                  name={customPhotoUri ? "close-outline" : "images-outline"}
+                  size={18}
+                  color="#4338CA"
+                />
+                <Text style={styles.photoButtonText}>
+                  {customPhotoUri ? "Remove" : "Choose"}
+                </Text>
+              </TouchableOpacity>
+            </View>
 
             <Text style={[styles.sectionTitle, styles.sizeTitle]}>Card size</Text>
             <View style={styles.sizeRow}>
@@ -1722,6 +1893,12 @@ const styles = StyleSheet.create({
   photoButton: { minHeight: 42, paddingHorizontal: 12, borderRadius: 12, backgroundColor: "#FFFFFF", flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderColor: "#C7D2FE" },
   photoButtonText: { color: "#4338CA", fontSize: 12, fontWeight: "900" },
   orDivider: { color: "#8B91A0", fontSize: 10, fontWeight: "900", letterSpacing: 1.2, marginBottom: 10 },
+  templateCategoryTabs: { flexDirection: "row", padding: 4, borderRadius: 15, backgroundColor: "#F1F3F7", marginBottom: 9 },
+  templateCategoryButton: { flex: 1, minHeight: 42, borderRadius: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
+  templateCategoryButtonActive: { backgroundColor: "#4F46E5" },
+  templateCategoryText: { color: "#4B5563", fontSize: 12, fontWeight: "900" },
+  templateCategoryTextActive: { color: "#FFFFFF" },
+  templateCategoryDetail: { color: "#6B7280", fontSize: 11, lineHeight: 16, marginBottom: 10 },
   fieldLabel: { color: "#4B5563", fontSize: 13, fontWeight: "800", marginBottom: 7 },
   input: { minHeight: 50, borderWidth: 1.4, borderColor: "#D1D5DB", borderRadius: 14, backgroundColor: "#FFFFFF", paddingHorizontal: 14, color: "#111827", fontSize: 15, marginBottom: 14 },
   messageInput: { minHeight: 108, paddingTop: 13, textAlignVertical: "top" },
@@ -1732,6 +1909,10 @@ const styles = StyleSheet.create({
   choiceActive: { borderColor: "#4F46E5", backgroundColor: "#EEF2FF" },
   templateSwatch: { height: 64, borderRadius: 10 },
   templateLabel: { color: "#374151", textAlign: "center", fontSize: 11, fontWeight: "800", marginTop: 7, marginBottom: 2 },
+  lifeTemplateChoice: { width: 116, padding: 5, borderRadius: 15, borderWidth: 2, borderColor: "transparent", backgroundColor: "#F9FAFB" },
+  lifeTemplateImage: { width: 102, height: 92, borderRadius: 10, backgroundColor: "#E5E7EB" },
+  lifeTemplateLabel: { color: "#374151", fontSize: 11, fontWeight: "900", marginTop: 7, marginHorizontal: 2 },
+  lifeTemplateDetail: { color: "#9CA3AF", fontSize: 9, marginTop: 2, marginHorizontal: 2, marginBottom: 2 },
   typographyHeading: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginTop: 22, marginBottom: 10 },
   typographyHint: { color: "#8B91A0", fontSize: 11, fontWeight: "700" },
   typographyRow: { gap: 10, paddingRight: 8 },

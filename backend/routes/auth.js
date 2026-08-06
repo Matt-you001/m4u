@@ -21,7 +21,7 @@ const router = express.Router();
     const { rows } = await pool.query(
       `
       INSERT INTO users (email, password, plan, credits, extra_credits)
-      VALUES ($1, $2, 'free', 15, 0)
+      VALUES ($1, $2, 'free', 10, 0)
       RETURNING id, email, plan, credits, extra_credits
       `,
       [email, hashedPassword]

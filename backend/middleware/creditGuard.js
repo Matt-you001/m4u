@@ -1,8 +1,11 @@
 import { pool } from "../db.js";
+import { refreshCreditsIfDue } from "../lib/planCredits.js";
 
 export const creditGuard = async (req, res, next) => {
   try {
     const userId = req.user.id;
+
+    await refreshCreditsIfDue(userId);
 
     const { rows } = await pool.query(
       `SELECT plan, credits, extra_credits FROM users WHERE id = $1`,

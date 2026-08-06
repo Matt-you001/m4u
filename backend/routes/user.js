@@ -1,15 +1,12 @@
 import bcrypt from "bcrypt";
 import express from "express";
 import { pool } from "../db.js";
+import { PLAN_CREDITS, refreshCreditsIfDue } from "../lib/planCredits.js";
 import { authenticateUser } from "../middleware/auth.js";
 
 const router = express.Router();
 
-const PLAN_LIMITS = {
-  free: 10,
-  basic: 50,
-  premium: 80,
-};
+const PLAN_LIMITS = PLAN_CREDITS;
 
 function getPlanFromRevenueCatSnapshot(entitlementIds = [], productIds = []) {
   const basicEntitlementId = String(
@@ -98,6 +95,8 @@ router.post("/upgrade", authenticateUser, async (req, res) => {
  */
 router.get("/me", authenticateUser, async (req, res) => {
   try {
+    await refreshCreditsIfDue(req.user.id);
+
     const { rows } = await pool.query(
       `
       SELECT
@@ -309,6 +308,8 @@ router.post("/sync-subscription", authenticateUser, async (req, res) => {
         [syncedPlan, PLAN_LIMITS[syncedPlan], userId]
       );
     }
+
+    await refreshCreditsIfDue(userId);
 
     const { rows } = await pool.query(
       `

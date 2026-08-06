@@ -11,6 +11,10 @@ import {
 } from "./lib/mailer.js";
 import { refundReservedCredits, reserveCredits } from "./lib/credits.js";
 import { getOpenAI } from "./lib/openai.js";
+import {
+  PLAN_CREDITS,
+  refreshAllDueCredits,
+} from "./lib/planCredits.js";
 import { authenticateUser } from "./middleware/auth.js";
 import { creditGuard } from "./middleware/creditGuard.js";
 import { paidPlanGuard } from "./middleware/paidPlanGuard.js";
@@ -45,11 +49,7 @@ app.get("/hello", (req, res) => {
 const OTP_TTL_MINUTES = 10;
 const OTP_RESEND_COOLDOWN_SECONDS = 60;
 const OTP_MAX_ATTEMPTS = 5;
-const PLAN_LIMITS = {
-  free: 10,
-  basic: 50,
-  premium: 80,
-};
+const PLAN_LIMITS = PLAN_CREDITS;
 
 function isStrongPassword(password) {
   return (
@@ -212,7 +212,11 @@ function getPlanFromRevenueCatEntitlements(entitlementIds = [], productId = "") 
   return "free";
 }
 
-async function updateUserPlanFromRevenueCat(userId, nextPlan) {
+async function updateUserPlanFromRevenueCat(
+  userId,
+  nextPlan,
+  { refillCredits = false } = {}
+) {
   const result = await pool.query(
     `
     SELECT plan, credits, extra_credits
@@ -229,7 +233,7 @@ async function updateUserPlanFromRevenueCat(userId, nextPlan) {
   const currentUser = result.rows[0];
   const currentPlan = currentUser.plan || "free";
 
-  if (currentPlan === nextPlan) {
+  if (currentPlan === nextPlan && !refillCredits) {
     return { updated: false, reason: "Plan already in sync" };
   }
 
@@ -239,14 +243,22 @@ async function updateUserPlanFromRevenueCat(userId, nextPlan) {
     SET
       plan = $1,
       credits = $2,
-      extra_credits = 0,
+      extra_credits = CASE
+        WHEN plan = $1 THEN extra_credits
+        ELSE 0
+      END,
       last_credit_reset = NOW()
     WHERE id = $3
     `,
     [nextPlan, PLAN_LIMITS[nextPlan] || PLAN_LIMITS.free, userId]
   );
 
-  return { updated: true, previousPlan: currentPlan, nextPlan };
+  return {
+    updated: true,
+    previousPlan: currentPlan,
+    nextPlan,
+    creditsRefilled: refillCredits || currentPlan !== nextPlan,
+  };
 }
 
 async function handleRevenueCatWebhookEvent(event) {
@@ -292,8 +304,13 @@ async function handleRevenueCatWebhookEvent(event) {
       return;
   }
 
+  const shouldRefillCredits =
+    eventType === "INITIAL_PURCHASE" || eventType === "RENEWAL";
+
   for (const userId of candidateUserIds) {
-    const syncResult = await updateUserPlanFromRevenueCat(userId, nextPlan);
+    const syncResult = await updateUserPlanFromRevenueCat(userId, nextPlan, {
+      refillCredits: shouldRefillCredits,
+    });
     if (syncResult.updated) {
       console.log(
         `RevenueCat sync: user ${userId} plan updated from ${syncResult.previousPlan} to ${syncResult.nextPlan} via ${eventType}`
@@ -308,6 +325,9 @@ async function handleRevenueCatWebhookEvent(event) {
 }
 
 app.post("/integrations/revenuecat/webhook", async (req, res) => {
+  const event = req.body?.event;
+  const eventId = String(event?.id || "").trim();
+
   try {
     const { authHeader } = getRevenueCatWebhookConfig();
     const requestAuthHeader = req.headers.authorization || "";
@@ -316,12 +336,37 @@ app.post("/integrations/revenuecat/webhook", async (req, res) => {
       return res.status(401).json({ error: "Unauthorized webhook" });
     }
 
-    res.status(200).json({ received: true });
+    if (eventId) {
+      const claim = await pool.query(
+        `
+        INSERT INTO revenuecat_webhook_events (event_id, event_type)
+        VALUES ($1, $2)
+        ON CONFLICT (event_id) DO NOTHING
+        RETURNING event_id
+        `,
+        [eventId, String(event?.type || "UNKNOWN")]
+      );
 
-    const event = req.body?.event;
+      if (!claim.rows.length) {
+        return res.status(200).json({ received: true, duplicate: true });
+      }
+    }
+
     await handleRevenueCatWebhookEvent(event);
+    return res.status(200).json({ received: true });
   } catch (err) {
     console.error("RevenueCat webhook error:", err);
+
+    if (eventId) {
+      await pool.query(
+        `DELETE FROM revenuecat_webhook_events WHERE event_id = $1`,
+        [eventId]
+      ).catch((cleanupError) => {
+        console.error("RevenueCat webhook claim cleanup error:", cleanupError);
+      });
+    }
+
+    return res.status(500).json({ received: false });
   }
 });
 
@@ -940,11 +985,12 @@ app.post("/ads/reward", authenticateUser, async (req, res) => {
 app.post("/feedback", authenticateUser, async (req, res) => {
   try {
     const userId = req.user.id;
-    const { message, category } = req.body;
+    const { message, category, rating } = req.body;
+    const normalizedRating = Number(rating);
 
-    if (!message?.trim() || message.trim().length < 10) {
+    if (!Number.isInteger(normalizedRating) || normalizedRating < 1 || normalizedRating > 5) {
       return res.status(400).json({
-        error: "Please enter at least a short feedback message",
+        error: "Please select a rating from 1 to 5 stars",
       });
     }
 
@@ -970,7 +1016,8 @@ app.post("/feedback", authenticateUser, async (req, res) => {
       email: user.email,
       plan: user.plan,
       category: category?.trim() || "General",
-      message: message.trim(),
+      rating: normalizedRating,
+      message: String(message || "").trim(),
     });
 
     res.json({
@@ -1814,6 +1861,23 @@ const PORT = process.env.PORT || 10000;
 
 async function startServer() {
   await ensureAuthSchema();
+
+  const initiallyRefreshed = await refreshAllDueCredits();
+  if (initiallyRefreshed > 0) {
+    console.log(`Monthly credits refreshed for ${initiallyRefreshed} users on startup`);
+  }
+
+  const creditRefreshTimer = setInterval(async () => {
+    try {
+      const refreshedUsers = await refreshAllDueCredits();
+      if (refreshedUsers > 0) {
+        console.log(`Monthly credits refreshed for ${refreshedUsers} users`);
+      }
+    } catch (error) {
+      console.error("Scheduled monthly credit refresh failed:", error);
+    }
+  }, 60 * 60 * 1000);
+  creditRefreshTimer.unref();
 
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);

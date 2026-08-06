@@ -11,7 +11,7 @@ export const PLANS = {
 
   basic: {
     name: 'Basic',
-    monthlyCredits: 50,
+    monthlyCredits: 40,
     allowExtraCredits: true,
     historyAccess: true,
     removeAds: true,

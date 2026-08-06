@@ -1,5 +1,5 @@
-import UpgradeModal from '@/components/UpgradeModal';
 import BrandedBackdrop from '@/components/BrandedBackdrop';
+import UpgradeModal from '@/components/UpgradeModal';
 import { useAuth } from '@/context/AuthContext';
 import {
   bannerAdUnitId,
@@ -10,11 +10,11 @@ import {
 import api from '@/utils/api';
 import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
+import { useRouter } from 'expo-router';
 import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
 } from 'expo-speech-recognition';
-import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -753,8 +753,7 @@ export default function GenerateScreen() {
                 <View style={styles.voiceCopy}>
                   <Text style={styles.voiceTitle}>Voice Prompt</Text>
                   <Text style={styles.voiceHint}>
-                    Speak your ideas and we will place the transcript in the
-                    context field above.
+                    Speak your ideas and we will place it in the field above.
                   </Text>
                 </View>
 

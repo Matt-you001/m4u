@@ -5,7 +5,6 @@ import BrandedBackdrop from 'components/BrandedBackdrop';
 import HomeNativeAdCard from 'components/HomeNativeAdCard';
 import ProfileMenu from 'components/ProfileMenu';
 import * as Clipboard from 'expo-clipboard';
-import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -42,6 +41,7 @@ export default function HomeScreen() {
   const [successfulReferrals, setSuccessfulReferrals] = useState(0);
   const [referralMessage, setReferralMessage] = useState('');
   const [showFeedbackPrompt, setShowFeedbackPrompt] = useState(false);
+  const [feedbackPromptRating, setFeedbackPromptRating] = useState(0);
 
   useEffect(() => {
     setMenuPlan(plan);
@@ -120,7 +120,12 @@ export default function HomeScreen() {
 
   const handleOpenFeedback = async () => {
     await dismissFeedbackPrompt();
-    router.push('/feedback');
+    router.push({
+      pathname: '/feedback',
+      params: feedbackPromptRating
+        ? { rating: String(feedbackPromptRating) }
+        : {},
+    });
   };
 
   const getDownloadInviteLink = useCallback((code: string) => {
@@ -142,10 +147,6 @@ export default function HomeScreen() {
     if (!referralCode) return;
 
     const downloadLink = getDownloadInviteLink(referralCode);
-    const appInviteLink = Linking.createURL('/signup', {
-      queryParams: { ref: referralCode },
-    });
-
     await Share.share({
       message:
         `Generate and respond to messages for every occasion on the go with Message4u. ` +
@@ -179,11 +180,30 @@ export default function HomeScreen() {
                 color="#4338CA"
               />
             </View>
-            <Text style={styles.feedbackTitle}>We'd love your feedback</Text>
+            <Text style={styles.feedbackTitle}>We&apos;d love your feedback</Text>
             <Text style={styles.feedbackText}>
               Tell us what feels good, what feels off, or what you want us to
               improve next.
             </Text>
+            <Text style={styles.feedbackRatingLabel}>How would you rate Message4U?</Text>
+            <View style={styles.feedbackRatingRow} accessibilityRole="radiogroup">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <TouchableOpacity
+                  key={star}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: feedbackPromptRating === star }}
+                  accessibilityLabel={`${star} star${star === 1 ? '' : 's'}`}
+                  onPress={() => setFeedbackPromptRating(star)}
+                  style={styles.feedbackStarButton}
+                >
+                  <MaterialCommunityIcons
+                    name={star <= feedbackPromptRating ? 'star' : 'star-outline'}
+                    size={30}
+                    color={star <= feedbackPromptRating ? '#F59E0B' : '#A8AFBD'}
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
             <View style={styles.feedbackActions}>
               <TouchableOpacity
                 style={styles.feedbackPrimaryButton}
@@ -466,6 +486,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 21,
     color: '#5B6475',
+  },
+  feedbackRatingLabel: {
+    marginTop: 16,
+    marginBottom: 7,
+    color: '#312E81',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  feedbackRatingRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  feedbackStarButton: {
+    width: 42,
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    backgroundColor: '#FFFDF6',
   },
   feedbackActions: {
     flexDirection: 'row',

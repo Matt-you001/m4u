@@ -1,9 +1,13 @@
 import BrandedBackdrop from "@/components/BrandedBackdrop";
 import api from "@/utils/api";
-import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import * as StoreReview from "expo-store-review";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
+  Linking,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -22,18 +26,44 @@ const FEEDBACK_CATEGORIES = [
 
 export default function FeedbackScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ rating?: string }>();
+  const initialRating = Math.min(5, Math.max(0, Number(params.rating) || 0));
   const [category, setCategory] =
     useState<(typeof FEEDBACK_CATEGORIES)[number]>("General");
+  const [rating, setRating] = useState(initialRating);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  const requestPlayStoreRating = async () => {
+    try {
+      if ((await StoreReview.isAvailableAsync()) && (await StoreReview.hasAction())) {
+        await StoreReview.requestReview();
+        return;
+      }
+    } catch (reviewError) {
+      console.log("Native store review unavailable", reviewError);
+    }
+
+    if (Platform.OS === "android") {
+      const packageName = "com.mattonah.message4u";
+      const marketUrl = `market://details?id=${packageName}&showAllReviews=true`;
+      const webUrl = `https://play.google.com/store/apps/details?id=${packageName}&showAllReviews=true`;
+
+      try {
+        await Linking.openURL(marketUrl);
+      } catch {
+        await Linking.openURL(webUrl);
+      }
+    }
+  };
+
   const handleSubmit = async () => {
     if (loading) return;
 
-    if (!message.trim() || message.trim().length < 10) {
-      setError("Please enter a little more detail so we can help properly.");
+    if (rating < 1 || rating > 5) {
+      setError("Please select a star rating before sending your feedback.");
       return;
     }
 
@@ -44,11 +74,16 @@ export default function FeedbackScreen() {
 
       const res = await api.post("/feedback", {
         category,
+        rating,
         message: message.trim(),
       });
 
-      setSuccess(res.data.message || "Thanks for your feedback.");
+      setSuccess(
+        `${res.data.message || "Thanks for your feedback."} Google Play will open so you can confirm your public rating.`
+      );
       setMessage("");
+      await requestPlayStoreRating();
+      setRating(0);
     } catch (err: any) {
       setError(
         err?.response?.data?.error || "Unable to send feedback right now."
@@ -77,6 +112,35 @@ export default function FeedbackScreen() {
         </Text>
 
         <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Rate your experience</Text>
+          <View style={styles.ratingRow} accessibilityRole="radiogroup">
+            {[1, 2, 3, 4, 5].map((star) => (
+              <Pressable
+                key={star}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: rating === star }}
+                accessibilityLabel={`${star} star${star === 1 ? "" : "s"}`}
+                hitSlop={6}
+                onPress={() => {
+                  setRating(star);
+                  setError("");
+                }}
+                style={styles.starButton}
+              >
+                <Ionicons
+                  name={star <= rating ? "star" : "star-outline"}
+                  size={34}
+                  color={star <= rating ? "#F59E0B" : "#A8AFBD"}
+                />
+              </Pressable>
+            ))}
+          </View>
+          <Text style={styles.ratingHint}>
+            {rating
+              ? `${rating} out of 5 selected. Google Play will ask you to confirm the public rating after submission.`
+              : "Select the number of stars that matches your experience."}
+          </Text>
+
           <Text style={styles.sectionTitle}>Category</Text>
           <View style={styles.chipRow}>
             {FEEDBACK_CATEGORIES.map((item) => {
@@ -95,11 +159,11 @@ export default function FeedbackScreen() {
             })}
           </View>
 
-          <Text style={styles.sectionTitle}>Your feedback</Text>
+          <Text style={styles.sectionTitle}>Your feedback (optional)</Text>
           <TextInput
             value={message}
             onChangeText={setMessage}
-            placeholder="For example: The app feels smooth, but I would love a quicker way to reuse old messages..."
+            placeholder="Optional: Tell us what you enjoy or what we could improve..."
             placeholderTextColor="#9CA3AF"
             multiline
             style={styles.textArea}
@@ -168,6 +232,26 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#111827",
     marginBottom: 12,
+  },
+  ratingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  starButton: {
+    width: 48,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 14,
+    backgroundColor: "#FFFDF6",
+  },
+  ratingHint: {
+    color: "#667085",
+    fontSize: 12,
+    lineHeight: 18,
+    marginBottom: 20,
   },
   chipRow: {
     flexDirection: "row",

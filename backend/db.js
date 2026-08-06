@@ -39,4 +39,12 @@ export async function ensureAuthSchema() {
     ON users (referral_code)
     WHERE referral_code IS NOT NULL;
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS revenuecat_webhook_events (
+      event_id text PRIMARY KEY,
+      event_type text NOT NULL,
+      processed_at timestamptz NOT NULL DEFAULT NOW()
+    );
+  `);
 }

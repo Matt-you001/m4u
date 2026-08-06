@@ -1,6 +1,8 @@
 import { pool } from "../db.js";
+import { refreshCreditsIfDue } from "./planCredits.js";
 
 export async function reserveCredits(userId, amount) {
+  await refreshCreditsIfDue(userId);
   const client = await pool.connect();
 
   try {
