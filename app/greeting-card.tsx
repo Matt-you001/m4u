@@ -869,6 +869,7 @@ export default function GreetingCardScreen() {
   const activeHeadline = textMode === "short" ? shortHeadline : longHeadline;
   const activeBody = textMode === "short" ? shortBody : longBody;
   const hasCardCopy = Boolean(activeHeadline.trim() && activeBody.trim());
+  const isCorporateCard = draft?.mode === "corporate";
   const hasFreeAttribution = accessPlan === "free";
   const hasBasicWatermark = accessPlan === "basic";
   const activeTextColor = hasImageBackground ? "#FFFFFF" : selectedTemplate.textColor;
@@ -907,10 +908,15 @@ export default function GreetingCardScreen() {
       setGenerating(true);
       setError("");
       const response = await api.post("/generate-card-text", {
+        mode: draft.mode || "individual",
         category: draft.category,
         tone: draft.tone,
         context: draft.context || draft.message,
         recipientName,
+        productName: draft.productName,
+        platform: draft.platform,
+        audience: draft.audience,
+        callToAction: draft.callToAction,
         language: draft.language || "English",
       });
 
@@ -989,7 +995,13 @@ export default function GreetingCardScreen() {
       const response = await api.post("/generate-card-template", {
         category: draft.category,
         tone: draft.tone,
-        description: aiPrompt.trim(),
+        description: [
+          aiPrompt.trim(),
+          draft.mode === "corporate" &&
+            `Business campaign artwork for ${draft.productName || "the featured offer"} on ${draft.platform || "a digital platform"}.`,
+        ]
+          .filter(Boolean)
+          .join(" "),
         cardSize,
       });
       const imageBase64 = String(response.data?.imageBase64 || "");
@@ -1128,7 +1140,11 @@ export default function GreetingCardScreen() {
 
           <View style={styles.headingWrap}>
             <Text style={styles.eyebrow}>MESSAGE4U CARD STUDIO</Text>
-            <Text style={styles.title}>Turn the moment into a card.</Text>
+            <Text style={styles.title}>
+              {isCorporateCard
+                ? "Turn your campaign into a card."
+                : "Turn the moment into a card."}
+            </Text>
           </View>
 
           <View style={styles.modeTabs}>
@@ -1207,7 +1223,9 @@ export default function GreetingCardScreen() {
 
             <View style={styles.twoColumns}>
               <View style={styles.column}>
-                <Text style={styles.fieldLabel}>Recipient</Text>
+                <Text style={styles.fieldLabel}>
+                  {isCorporateCard ? "Audience" : "Recipient"}
+                </Text>
                 <TextInput
                   value={recipientName}
                   onChangeText={setRecipientName}
@@ -1218,7 +1236,9 @@ export default function GreetingCardScreen() {
                 />
               </View>
               <View style={styles.column}>
-                <Text style={styles.fieldLabel}>Sender</Text>
+                <Text style={styles.fieldLabel}>
+                  {isCorporateCard ? "Business" : "Sender"}
+                </Text>
                 <TextInput
                   value={senderName}
                   onChangeText={setSenderName}

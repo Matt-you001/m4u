@@ -3,6 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 const GREETING_CARD_DRAFT_KEY = "m4u_greeting_card_draft";
 
 export type GreetingCardDraft = {
+  mode?: "individual" | "corporate";
   message: string;
   category: string;
   tone: string;
@@ -10,6 +11,10 @@ export type GreetingCardDraft = {
   recipientName?: string;
   senderName?: string;
   language?: string;
+  productName?: string;
+  platform?: string;
+  audience?: string;
+  callToAction?: string;
 };
 
 export async function saveGreetingCardDraft(draft: GreetingCardDraft) {

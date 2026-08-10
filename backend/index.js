@@ -1618,10 +1618,15 @@ app.post(
   async (req, res) => {
     try {
       const {
+        mode,
         category,
         tone,
         context,
         recipientName,
+        productName,
+        platform,
+        audience,
+        callToAction,
         language,
       } = req.body;
 
@@ -1630,30 +1635,39 @@ app.post(
       }
 
       const finalLanguage = language?.trim() || "English";
+      const isCorporateCard = String(mode || "individual").toLowerCase() === "corporate";
       const modelConfig = getModelConfigForPlan(req.currentPlan || req.user.plan);
       const openai = getOpenAI();
       const completion = await createChatCompletionWithFallback(openai, modelConfig, {
         messages: [
           {
             role: "system",
-            content: `You write concise greeting-card copy that looks elegant when placed on an image.
+            content: `${isCorporateCard
+              ? "You write concise promotional card copy for businesses that looks polished when placed on an image."
+              : "You write concise greeting-card copy that looks elegant when placed on an image."}
 
 Return exactly two lines in this format:
 HEADLINE: a short headline of no more than 5 words
-MESSAGE: one natural card message of no more than 24 words
+MESSAGE: one ${isCorporateCard ? "clear, persuasive promotional" : "natural card"} message of no more than 24 words
 
 Do not use markdown, quotation marks, placeholders, signatures, hashtags, or emojis.
 Do not repeat the headline in the message.
-Keep the wording human, memorable, and suitable for a visual greeting card.
+Keep the wording human, memorable, and suitable for a visual ${isCorporateCard ? "business campaign card" : "greeting card"}.
+${isCorporateCard ? "Mention the offer or product naturally and include a brief call to action when one is supplied." : ""}
 Write both lines entirely in ${finalLanguage}.`,
           },
           {
             role: "user",
-            content: `Create short greeting-card copy.
+            content: `Create short ${isCorporateCard ? "business campaign card" : "greeting-card"} copy.
 
 Occasion: ${category.trim()}
 Tone: ${tone?.trim() || "Neutral"}
-Recipient: ${recipientName?.trim() || "Not specified"}
+${isCorporateCard
+  ? `Product or service: ${String(productName || "Not specified").trim()}
+Platform: ${String(platform || "Not specified").trim()}
+Target audience: ${String(audience || recipientName || "Not specified").trim()}
+Call to action: ${String(callToAction || "Not specified").trim()}`
+  : `Recipient: ${recipientName?.trim() || "Not specified"}`}
 Context from the original message: ${context?.trim() || "None"}
 
 Tone guidance: ${getToneGuidance(tone || "neutral")}

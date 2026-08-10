@@ -490,9 +490,41 @@ export default function GenerateScreen() {
   };
 
   const openGeneratedMessageAsCard = async () => {
-    if (!result.trim() || mode !== 'individual') return;
+    if (!result.trim()) return;
+
+    if (mode === 'corporate') {
+      const corporateCardContext = [
+        `Generated campaign message: ${result.trim()}`,
+        `Product or service: ${productName.trim()}`,
+        `Platform: ${finalBusinessPlatform}`,
+        `Target audience: ${finalBusinessAudience}`,
+        businessContext.trim() && `Campaign details: ${businessContext.trim()}`,
+        businessCallToAction.trim() &&
+          `Call to action: ${businessCallToAction.trim()}`,
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+      await saveGreetingCardDraft({
+        mode: 'corporate',
+        message: result.trim(),
+        category: finalBusinessCategory,
+        tone: finalBusinessTone,
+        context: corporateCardContext,
+        recipientName: finalBusinessAudience,
+        senderName: businessName.trim(),
+        language: finalLanguage,
+        productName: productName.trim(),
+        platform: finalBusinessPlatform,
+        audience: finalBusinessAudience,
+        callToAction: businessCallToAction.trim(),
+      });
+      router.push('/greeting-card');
+      return;
+    }
 
     await saveGreetingCardDraft({
+      mode: 'individual',
       message: result.trim(),
       category: finalCategory,
       tone: finalTone,
@@ -515,6 +547,7 @@ export default function GenerateScreen() {
 
     setError('');
     await saveGreetingCardDraft({
+      mode: 'individual',
       message: '',
       category: finalCategory,
       tone: finalTone,
@@ -1032,21 +1065,19 @@ export default function GenerateScreen() {
                   mode === 'corporate' ? finalBusinessPlatform : undefined
                 }
               />
-              {mode === 'individual' && (
-                <TouchableOpacity
-                  style={styles.cardStudioButton}
-                  onPress={openGeneratedMessageAsCard}
-                >
-                  <Ionicons
-                    name="image-outline"
-                    size={20}
-                    color="#FFFFFF"
-                  />
-                  <Text style={styles.cardStudioButtonText}>
-                    Create a Card
-                  </Text>
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity
+                style={styles.cardStudioButton}
+                onPress={openGeneratedMessageAsCard}
+              >
+                <Ionicons
+                  name="image-outline"
+                  size={20}
+                  color="#FFFFFF"
+                />
+                <Text style={styles.cardStudioButtonText}>
+                  {mode === 'corporate' ? 'Convert to a Card' : 'Create a Card'}
+                </Text>
+              </TouchableOpacity>
             </View>
           )}
         </ScrollView>
