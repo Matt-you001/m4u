@@ -37,6 +37,16 @@ import {
 
 type CardTextMode = "short" | "long";
 type CardSize = "portrait" | "square" | "story";
+type CardTextColorId =
+  | "auto"
+  | "ink"
+  | "white"
+  | "navy"
+  | "blue"
+  | "plum"
+  | "rose"
+  | "gold"
+  | "green";
 type CardTextStyleId =
   | "romantic"
   | "classic"
@@ -87,6 +97,23 @@ type CardTextStyle = {
   accent: "line" | "dot" | "bar" | "none";
   panel: boolean;
 };
+
+const CARD_TEXT_COLORS: {
+  id: CardTextColorId;
+  label: string;
+  color: string | null;
+  checkColor: string;
+}[] = [
+  { id: "auto", label: "Auto", color: null, checkColor: "#4338CA" },
+  { id: "ink", label: "Ink", color: "#111827", checkColor: "#FFFFFF" },
+  { id: "white", label: "White", color: "#FFFFFF", checkColor: "#111827" },
+  { id: "navy", label: "Navy", color: "#172554", checkColor: "#FFFFFF" },
+  { id: "blue", label: "Blue", color: "#1D4ED8", checkColor: "#FFFFFF" },
+  { id: "plum", label: "Plum", color: "#6B21A8", checkColor: "#FFFFFF" },
+  { id: "rose", label: "Rose", color: "#BE123C", checkColor: "#FFFFFF" },
+  { id: "gold", label: "Gold", color: "#A16207", checkColor: "#FFFFFF" },
+  { id: "green", label: "Green", color: "#166534", checkColor: "#FFFFFF" },
+];
 
 const CARD_TEXT_STYLES: CardTextStyle[] = [
   {
@@ -779,6 +806,7 @@ export default function GreetingCardScreen() {
   const [templateId, setTemplateId] = useState<TemplateId>("bloom");
   const [lifeTemplateId, setLifeTemplateId] = useState<LifeTemplateId | null>(null);
   const [textStyleId, setTextStyleId] = useState<CardTextStyleId>("romantic");
+  const [textColorId, setTextColorId] = useState<CardTextColorId>("auto");
   const [customPhotoUri, setCustomPhotoUri] = useState("");
   const [localAiTemplates, setLocalAiTemplates] = useState<LocalAiTemplate[]>([]);
   const [selectedAiTemplateId, setSelectedAiTemplateId] = useState("");
@@ -852,6 +880,10 @@ export default function GreetingCardScreen() {
     () => CARD_TEXT_STYLES.find((item) => item.id === textStyleId) || CARD_TEXT_STYLES[0],
     [textStyleId]
   );
+  const selectedTextColor = useMemo(
+    () => CARD_TEXT_COLORS.find((item) => item.id === textColorId) || CARD_TEXT_COLORS[0],
+    [textColorId]
+  );
   const selectedLifeTemplate = useMemo(
     () => LIFE_TEMPLATES.find((item) => item.id === lifeTemplateId) || null,
     [lifeTemplateId]
@@ -872,10 +904,10 @@ export default function GreetingCardScreen() {
   const isCorporateCard = draft?.mode === "corporate";
   const hasFreeAttribution = accessPlan === "free";
   const hasBasicWatermark = accessPlan === "basic";
-  const activeTextColor = hasImageBackground ? "#FFFFFF" : selectedTemplate.textColor;
-  const activeSoftTextColor = hasImageBackground
-    ? "rgba(255,255,255,0.88)"
-    : selectedTemplate.softTextColor;
+  const activeTextColor = selectedTextColor.color
+    || (hasImageBackground ? "#FFFFFF" : selectedTemplate.textColor);
+  const activeSoftTextColor = selectedTextColor.color
+    || (hasImageBackground ? "rgba(255,255,255,0.88)" : selectedTemplate.softTextColor);
   const activeAccentColor = selectedLifeTemplate?.accentColor || selectedTemplate.accentColor;
   const textAlignment = selectedTextStyle.alignment;
   const copyAlignment =
@@ -1560,11 +1592,61 @@ export default function GreetingCardScreen() {
                   >
                     {textStyle.label}
                   </Text>
-                  <Text numberOfLines={1} style={styles.typographyDetail}>
-                    {textStyle.detail}
-                  </Text>
                 </TouchableOpacity>
               ))}
+            </ScrollView>
+
+            <View style={styles.colorHeading}>
+              <Text style={styles.sectionTitle}>Text color</Text>
+              <Text style={styles.typographyHint}>Auto matches the background</Text>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.colorRow}
+            >
+              {CARD_TEXT_COLORS.map((textColor) => {
+                const selected = textColorId === textColor.id;
+
+                return (
+                  <TouchableOpacity
+                    key={textColor.id}
+                    style={[styles.colorChoice, selected && styles.colorChoiceActive]}
+                    onPress={() => setTextColorId(textColor.id)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${textColor.label} text color`}
+                    accessibilityState={{ selected }}
+                  >
+                    <View
+                      style={[
+                        styles.colorSwatch,
+                        textColor.color
+                          ? { backgroundColor: textColor.color }
+                          : styles.autoColorSwatch,
+                      ]}
+                    >
+                      {textColor.id === "auto" && !selected && (
+                        <Text style={styles.autoColorText}>Aa</Text>
+                      )}
+                      {selected && (
+                        <Ionicons
+                          name="checkmark"
+                          size={17}
+                          color={textColor.checkColor}
+                        />
+                      )}
+                    </View>
+                    <Text
+                      style={[
+                        styles.colorLabel,
+                        selected && styles.colorLabelActive,
+                      ]}
+                    >
+                      {textColor.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
 
             <View style={styles.aiStudio}>
@@ -1973,13 +2055,21 @@ const styles = StyleSheet.create({
   typographyHeading: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginTop: 22, marginBottom: 10 },
   typographyHint: { color: "#8B91A0", fontSize: 11, fontWeight: "700" },
   typographyRow: { gap: 10, paddingRight: 8 },
-  typographyChoice: { width: 118, minHeight: 122, borderRadius: 16, borderWidth: 1.5, borderColor: "#E5E7EB", backgroundColor: "#FFFFFF", padding: 10, justifyContent: "center" },
+  typographyChoice: { width: 102, minHeight: 88, borderRadius: 14, borderWidth: 1.5, borderColor: "#E5E7EB", backgroundColor: "#FFFFFF", padding: 8, justifyContent: "center" },
   typographyChoiceActive: { borderColor: "#4F46E5", backgroundColor: "#EEF2FF" },
-  typographySample: { color: "#374151", fontSize: 29, lineHeight: 35, textAlign: "center", marginBottom: 5 },
+  typographySample: { color: "#374151", fontSize: 27, lineHeight: 32, textAlign: "center", marginBottom: 4 },
   typographySampleActive: { color: "#4338CA" },
   typographyLabel: { color: "#374151", textAlign: "center", fontSize: 12, fontWeight: "900" },
   typographyLabelActive: { color: "#4338CA" },
-  typographyDetail: { color: "#9CA3AF", textAlign: "center", fontSize: 9, marginTop: 3 },
+  colorHeading: { flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", marginTop: 22, marginBottom: 10 },
+  colorRow: { gap: 9, paddingRight: 8 },
+  colorChoice: { width: 64, minHeight: 72, borderRadius: 14, borderWidth: 1.5, borderColor: "#E5E7EB", backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center", paddingVertical: 7 },
+  colorChoiceActive: { borderColor: "#4F46E5", backgroundColor: "#EEF2FF" },
+  colorSwatch: { width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: "rgba(17,24,39,0.18)", alignItems: "center", justifyContent: "center" },
+  autoColorSwatch: { backgroundColor: "#F8FAFC", borderColor: "#A5B4FC" },
+  autoColorText: { position: "absolute", color: "#4338CA", fontSize: 12, fontWeight: "900" },
+  colorLabel: { color: "#4B5563", fontSize: 10, fontWeight: "800", marginTop: 5 },
+  colorLabelActive: { color: "#4338CA" },
   sizeTitle: { marginTop: 22 },
   sizeRow: { flexDirection: "row", gap: 8 },
   sizeChoice: { flex: 1, minHeight: 62, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "#F3F4F6", borderWidth: 1.5, borderColor: "transparent" },
