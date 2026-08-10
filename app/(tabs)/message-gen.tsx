@@ -492,11 +492,6 @@ export default function GenerateScreen() {
   const openGeneratedMessageAsCard = async () => {
     if (!result.trim() || mode !== 'individual') return;
 
-    if (plan === 'free') {
-      router.push('/upgrade');
-      return;
-    }
-
     await saveGreetingCardDraft({
       message: result.trim(),
       category: finalCategory,
@@ -511,11 +506,6 @@ export default function GenerateScreen() {
 
   const createCardDirectly = async () => {
     if (mode !== 'individual') return;
-
-    if (plan === 'free') {
-      router.push('/upgrade');
-      return;
-    }
 
     const validationError = validateIndividualForm();
     if (validationError) {
@@ -1013,7 +1003,7 @@ export default function GenerateScreen() {
               disabled={loading}
             >
               <Ionicons
-                name={plan === 'free' ? 'lock-closed-outline' : 'image-outline'}
+                name="image-outline"
                 size={19}
                 color="#4338CA"
               />
@@ -1048,7 +1038,7 @@ export default function GenerateScreen() {
                   onPress={openGeneratedMessageAsCard}
                 >
                   <Ionicons
-                    name={plan === 'free' ? 'lock-closed-outline' : 'image-outline'}
+                    name="image-outline"
                     size={20}
                     color="#FFFFFF"
                   />

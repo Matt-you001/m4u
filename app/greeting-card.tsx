@@ -73,7 +73,7 @@ type LifeTemplateId =
   | "city"
   | "seaside"
   | "mountains";
-type PaidPlan = "basic" | "premium";
+type CardAccessPlan = "free" | "basic" | "premium";
 
 type CardTextStyle = {
   id: CardTextStyleId;
@@ -771,7 +771,7 @@ export default function GreetingCardScreen() {
   const cardRef = useRef<View>(null);
 
   const [draft, setDraft] = useState<GreetingCardDraft | null>(null);
-  const [accessPlan, setAccessPlan] = useState<PaidPlan | null>(null);
+  const [accessPlan, setAccessPlan] = useState<CardAccessPlan | null>(null);
   const [checkingAccess, setCheckingAccess] = useState(true);
   const [textMode, setTextMode] = useState<CardTextMode>("short");
   const [cardSize, setCardSize] = useState<CardSize>("portrait");
@@ -811,11 +811,6 @@ export default function GreetingCardScreen() {
 
       if (!mounted) return;
 
-      if (latestPlan !== "basic" && latestPlan !== "premium") {
-        router.replace("/upgrade");
-        return;
-      }
-
       if (!storedDraft) {
         Alert.alert(
           "No message selected",
@@ -825,7 +820,10 @@ export default function GreetingCardScreen() {
         return;
       }
 
-      setAccessPlan(latestPlan as PaidPlan);
+      const cardAccessPlan: CardAccessPlan =
+        latestPlan === "basic" || latestPlan === "premium" ? latestPlan : "free";
+
+      setAccessPlan(cardAccessPlan);
       setLocalAiTemplates(savedTemplates);
       setDraft(storedDraft);
       setLongHeadline(getDefaultHeadline(storedDraft.category));
@@ -871,6 +869,7 @@ export default function GreetingCardScreen() {
   const activeHeadline = textMode === "short" ? shortHeadline : longHeadline;
   const activeBody = textMode === "short" ? shortBody : longBody;
   const hasCardCopy = Boolean(activeHeadline.trim() && activeBody.trim());
+  const hasFreeAttribution = accessPlan === "free";
   const hasBasicWatermark = accessPlan === "basic";
   const activeTextColor = hasImageBackground ? "#FFFFFF" : selectedTemplate.textColor;
   const activeSoftTextColor = hasImageBackground
@@ -1367,6 +1366,19 @@ export default function GreetingCardScreen() {
                     </View>
                   )}
                 </View>
+                {hasFreeAttribution && (
+                  <View style={styles.freeAttribution}>
+                    <Text style={styles.freeAttributionTitle}>Created with Message4u</Text>
+                    <Text
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.7}
+                      numberOfLines={1}
+                      style={styles.freeAttributionLink}
+                    >
+                      Click to download: https://play.google.com/store/apps/details?id=com.mattonah.message4u
+                    </Text>
+                  </View>
+                )}
               </View>
             </View>
           </View>
@@ -1421,7 +1433,7 @@ export default function GreetingCardScreen() {
             </View>
             <Text style={styles.templateCategoryDetail}>
               {templateCategory === "life"
-                ? "Real-life scenes with space reserved for your greeting."
+                ? "Scenes and Lifestyle Images"
                 : "Illustrated colors and decorative layouts created in the app."}
             </Text>
 
@@ -1675,11 +1687,13 @@ export default function GreetingCardScreen() {
             </View>
           </View>
 
-          {hasBasicWatermark && (
+          {(hasFreeAttribution || hasBasicWatermark) && (
             <View style={styles.planNote}>
               <Ionicons name="information-circle-outline" size={20} color="#4338CA" />
               <Text style={styles.planNoteText}>
-                Basic cards include a Message4U watermark. Premium cards export without it.
+                {hasFreeAttribution
+                  ? "Free cards include Message4u attribution and a download link."
+                  : "Basic cards include a Message4U watermark. Premium cards export without it."}
               </Text>
             </View>
           )}
@@ -1810,6 +1824,29 @@ const styles = StyleSheet.create({
   senderText: { flex: 1, fontSize: 12, fontStyle: "italic", fontWeight: "700" },
   watermarkPill: { backgroundColor: "rgba(17,24,39,0.68)", borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5 },
   watermarkText: { color: "#FFFFFF", fontSize: 8, fontWeight: "800", letterSpacing: 0.3 },
+  freeAttribution: {
+    width: "100%",
+    backgroundColor: "rgba(17,24,39,0.78)",
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    marginTop: 6,
+  },
+  freeAttributionTitle: {
+    color: "#FFFFFF",
+    fontSize: 8,
+    lineHeight: 11,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  freeAttributionLink: {
+    width: "100%",
+    color: "rgba(255,255,255,0.92)",
+    fontSize: 7,
+    lineHeight: 10,
+    fontWeight: "600",
+    textAlign: "center",
+  },
   glow: { position: "absolute", borderRadius: 999, backgroundColor: "rgba(255,255,255,0.42)" },
   bloomGlow: { width: 220, height: 220, top: -90, left: -70 },
   flower: { position: "absolute", width: 74, height: 74, borderRadius: 37, backgroundColor: "rgba(255,255,255,0.28)", borderWidth: 13, borderColor: "rgba(236,72,153,0.28)" },

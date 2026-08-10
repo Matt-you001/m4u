@@ -17,7 +17,6 @@ import {
 } from "./lib/planCredits.js";
 import { authenticateUser } from "./middleware/auth.js";
 import { creditGuard } from "./middleware/creditGuard.js";
-import { paidPlanGuard } from "./middleware/paidPlanGuard.js";
 import userRoutes from "./routes/user.js";
 
 const app = express();
@@ -1615,7 +1614,6 @@ Keep it concise and immediately usable as a personal message.`,
 app.post(
   "/generate-card-text",
   authenticateUser,
-  paidPlanGuard,
   creditGuard,
   async (req, res) => {
     try {
@@ -1691,7 +1689,6 @@ Occasion guidance: ${getCategoryGuidance(category)}`,
 app.post(
   "/generate-card-template",
   authenticateUser,
-  paidPlanGuard,
   async (req, res) => {
     const creditCost = 5;
     let reservation = null;
