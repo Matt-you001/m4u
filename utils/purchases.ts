@@ -2,6 +2,7 @@ import Constants from "expo-constants";
 import { Platform } from "react-native";
 import Purchases, { LOG_LEVEL } from "react-native-purchases";
 import RevenueCatUI, { PAYWALL_RESULT } from "react-native-purchases-ui";
+import { getAuthStore } from "../store/authStore";
 import api from "./api";
 
 type RevenueCatConfig = {
@@ -23,6 +24,54 @@ const FALLBACK_CONFIG: RevenueCatConfig = {
 };
 
 let isPurchasesConfigured = false;
+let isCustomerInfoListenerRegistered = false;
+
+type RevenueCatCustomerInfo = Awaited<ReturnType<typeof Purchases.getCustomerInfo>>;
+
+async function syncCustomerInfoToBackend(
+  customerInfo: RevenueCatCustomerInfo,
+  reason: string
+) {
+  try {
+    const entitlementIds = Object.keys(customerInfo.entitlements.active || {});
+    const productIds = Array.from(customerInfo.activeSubscriptions || []);
+
+    const response = await api.post("/user/sync-subscription", {
+      entitlementIds,
+      productIds,
+      originalAppUserId: customerInfo.originalAppUserId,
+    });
+
+    console.log("RevenueCat subscription synced to backend:", reason, {
+      plan: response.data?.plan,
+      totalCredits: response.data?.totalCredits,
+      entitlementIds,
+      productIds,
+    });
+
+    return response.data;
+  } catch (error) {
+    console.log(`RevenueCat backend sync error (${reason}):`, error);
+    return null;
+  }
+}
+
+function registerCustomerInfoListener() {
+  if (isCustomerInfoListenerRegistered) {
+    return;
+  }
+
+  Purchases.addCustomerInfoUpdateListener((customerInfo) => {
+    void syncCustomerInfoToBackend(customerInfo, "customer-info-update").then(
+      async (subscriptionSnapshot) => {
+        if (subscriptionSnapshot) {
+          await getAuthStore()?.refreshUser?.();
+        }
+      }
+    );
+  });
+  isCustomerInfoListenerRegistered = true;
+}
 
 async function syncRevenueCatPurchases(reason: string) {
   try {
@@ -49,28 +98,7 @@ async function syncRevenueCatSubscriptionToBackend(reason: string) {
     return null;
   }
 
-  try {
-    const entitlementIds = Object.keys(customerInfo.entitlements.active || {});
-    const productIds = Array.from(customerInfo.activeSubscriptions || []);
-
-    const response = await api.post("/user/sync-subscription", {
-      entitlementIds,
-      productIds,
-      originalAppUserId: customerInfo.originalAppUserId,
-    });
-
-    console.log("RevenueCat subscription synced to backend:", reason, {
-      plan: response.data?.plan,
-      totalCredits: response.data?.totalCredits,
-      entitlementIds,
-      productIds,
-    });
-
-    return response.data;
-  } catch (error) {
-    console.log(`RevenueCat backend sync error (${reason}):`, error);
-    return null;
-  }
+  return syncCustomerInfoToBackend(customerInfo, reason);
 }
 
 function getRevenueCatConfig(): RevenueCatConfig {
@@ -173,6 +201,7 @@ export async function initPurchases(userId: string) {
     await Purchases.logIn(String(userId));
     console.log("RevenueCat login:", userId);
 
+    registerCustomerInfoListener();
     await syncRevenueCatSubscriptionToBackend("post-login");
   } catch (e) {
     console.log("RevenueCat login error:", e);

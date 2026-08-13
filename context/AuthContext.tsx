@@ -229,12 +229,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         const user = await refreshUser();
 
-        if (user?.id && user?.plan && user.plan !== "free") {
-          void refreshRevenueCatSubscriptionState("app-resume").catch(
-            (error) => {
-              console.log("resume subscription sync failed", error);
-            }
-          );
+        if (user?.id) {
+          const subscriptionSnapshot =
+            await refreshRevenueCatSubscriptionState("app-resume");
+
+          if (subscriptionSnapshot) {
+            await refreshUser();
+          }
         }
       } catch (error) {
         console.log("resume refresh failed", error);

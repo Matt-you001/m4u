@@ -50,44 +50,13 @@ function getPlanFromRevenueCatSnapshot(entitlementIds = [], productIds = []) {
     return "basic";
   }
 
-  return null;
+  return "free";
 }
 
-/**
- * POST /user/upgrade
- * Body: { plan: "basic" | "premium" }
- */
 router.post("/upgrade", authenticateUser, async (req, res) => {
-  try {
-    const { plan } = req.body;
-    const userId = req.user.id;
-
-    if (!PLAN_LIMITS[plan]) {
-      return res.status(400).json({ error: "Invalid plan" });
-    }
-
-    await pool.query(
-      `
-      UPDATE users
-      SET
-        plan = $1,
-        credits = $2,
-        extra_credits = 0,
-        last_credit_reset = NOW()
-      WHERE id = $3
-      `,
-      [plan, PLAN_LIMITS[plan], userId]
-    );
-
-    res.json({
-      success: true,
-      plan,
-      credits: PLAN_LIMITS[plan],
-    });
-  } catch (err) {
-    console.error("Plan upgrade error:", err);
-    res.status(500).json({ error: "Unable to upgrade plan" });
-  }
+  return res.status(403).json({
+    error: "Plan changes must be verified through RevenueCat",
+  });
 });
 
 /**
@@ -281,33 +250,36 @@ router.post("/change-password", authenticateUser, async (req, res) => {
 router.post("/sync-subscription", authenticateUser, async (req, res) => {
   try {
     const userId = req.user.id;
-    const { entitlementIds = [], productIds = [] } = req.body || {};
+    const entitlementIds = Array.isArray(req.body?.entitlementIds)
+      ? req.body.entitlementIds
+      : [];
+    const productIds = Array.isArray(req.body?.productIds)
+      ? req.body.productIds
+      : [];
 
     const syncedPlan = getPlanFromRevenueCatSnapshot(entitlementIds, productIds);
 
-    if (syncedPlan) {
-      await pool.query(
-        `
-        UPDATE users
-        SET
-          plan = $1,
-          credits = CASE
-            WHEN plan = $1 THEN credits
-            ELSE $2
-          END,
-          extra_credits = CASE
-            WHEN plan = $1 THEN extra_credits
-            ELSE 0
-          END,
-          last_credit_reset = CASE
-            WHEN plan = $1 THEN last_credit_reset
-            ELSE NOW()
-          END
-        WHERE id = $3
-        `,
-        [syncedPlan, PLAN_LIMITS[syncedPlan], userId]
-      );
-    }
+    await pool.query(
+      `
+      UPDATE users
+      SET
+        plan = $1,
+        credits = CASE
+          WHEN plan = $1 THEN credits
+          ELSE $2
+        END,
+        extra_credits = CASE
+          WHEN plan = $1 THEN extra_credits
+          ELSE 0
+        END,
+        last_credit_reset = CASE
+          WHEN plan = $1 THEN last_credit_reset
+          ELSE NOW()
+        END
+      WHERE id = $3
+      `,
+      [syncedPlan, PLAN_LIMITS[syncedPlan], userId]
+    );
 
     await refreshCreditsIfDue(userId);
 
@@ -344,7 +316,7 @@ router.post("/sync-subscription", authenticateUser, async (req, res) => {
     const usedCredits = Math.max(baseCredits - user.credits, 0);
 
     return res.json({
-      synced: Boolean(syncedPlan),
+      synced: true,
       id: user.id,
       firstName: user.first_name || "",
       lastName: user.last_name || "",

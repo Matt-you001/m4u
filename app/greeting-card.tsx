@@ -41,7 +41,7 @@ type CardTextColorId =
   | "auto"
   | "ink"
   | "white"
-  | "navy"
+  | "teal"
   | "blue"
   | "plum"
   | "rose"
@@ -107,7 +107,7 @@ const CARD_TEXT_COLORS: {
   { id: "auto", label: "Auto", color: null, checkColor: "#4338CA" },
   { id: "ink", label: "Ink", color: "#111827", checkColor: "#FFFFFF" },
   { id: "white", label: "White", color: "#FFFFFF", checkColor: "#111827" },
-  { id: "navy", label: "Navy", color: "#172554", checkColor: "#FFFFFF" },
+  { id: "teal", label: "Teal", color: "#0D9488", checkColor: "#FFFFFF" },
   { id: "blue", label: "Blue", color: "#1D4ED8", checkColor: "#FFFFFF" },
   { id: "plum", label: "Plum", color: "#6B21A8", checkColor: "#FFFFFF" },
   { id: "rose", label: "Rose", color: "#BE123C", checkColor: "#FFFFFF" },
@@ -854,6 +854,9 @@ export default function GreetingCardScreen() {
       setAccessPlan(cardAccessPlan);
       setLocalAiTemplates(savedTemplates);
       setDraft(storedDraft);
+      if (storedDraft.mode === "corporate" && storedDraft.message.trim()) {
+        setTextMode("long");
+      }
       setLongHeadline(getDefaultHeadline(storedDraft.category));
       setLongBody(storedDraft.message || "");
       setRecipientName(storedDraft.recipientName || "");

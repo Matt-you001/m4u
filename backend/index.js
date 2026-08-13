@@ -303,8 +303,10 @@ async function handleRevenueCatWebhookEvent(event) {
       return;
   }
 
-  const shouldRefillCredits =
-    eventType === "INITIAL_PURCHASE" || eventType === "RENEWAL";
+  // License-test renewals are accelerated to minutes. The monthly credit
+  // scheduler owns recurring refills so sandbox renewals cannot repeatedly
+  // replenish a user's balance.
+  const shouldRefillCredits = eventType === "INITIAL_PURCHASE";
 
   for (const userId of candidateUserIds) {
     const syncResult = await updateUserPlanFromRevenueCat(userId, nextPlan, {
