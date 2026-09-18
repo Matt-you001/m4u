@@ -1,7 +1,10 @@
 import { pool } from "../db.js";
+import { expireSubscriptionIfDue } from "../lib/planCredits.js";
 
 export const paidPlanGuard = async (req, res, next) => {
   try {
+    await expireSubscriptionIfDue(req.user.id);
+
     const { rows } = await pool.query(
       `SELECT plan FROM users WHERE id = $1`,
       [req.user.id]

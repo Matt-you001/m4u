@@ -25,7 +25,12 @@ export async function ensureAuthSchema() {
       ADD COLUMN IF NOT EXISTS password_reset_code_hash text,
       ADD COLUMN IF NOT EXISTS password_reset_expires timestamptz,
       ADD COLUMN IF NOT EXISTS password_reset_attempts integer NOT NULL DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS password_reset_last_sent_at timestamptz;
+      ADD COLUMN IF NOT EXISTS password_reset_last_sent_at timestamptz,
+      ADD COLUMN IF NOT EXISTS subscription_expires_at timestamptz,
+      ADD COLUMN IF NOT EXISTS subscription_environment text,
+      ADD COLUMN IF NOT EXISTS subscription_product_id text,
+      ADD COLUMN IF NOT EXISTS subscription_last_synced_at timestamptz,
+      ADD COLUMN IF NOT EXISTS subscription_server_verified_at timestamptz;
   `);
 
   await pool.query(`

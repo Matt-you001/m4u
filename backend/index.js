@@ -214,11 +214,16 @@ function getPlanFromRevenueCatEntitlements(entitlementIds = [], productId = "") 
 async function updateUserPlanFromRevenueCat(
   userId,
   nextPlan,
-  { refillCredits = false } = {}
+  {
+    refillCredits = false,
+    expiresAt = null,
+    environment = null,
+    productId = null,
+  } = {}
 ) {
   const result = await pool.query(
     `
-    SELECT plan, credits, extra_credits
+    SELECT plan, credits, extra_credits, subscription_expires_at
     FROM users
     WHERE id = $1
     `,
@@ -232,24 +237,38 @@ async function updateUserPlanFromRevenueCat(
   const currentUser = result.rows[0];
   const currentPlan = currentUser.plan || "free";
 
-  if (currentPlan === nextPlan && !refillCredits) {
-    return { updated: false, reason: "Plan already in sync" };
-  }
-
   await pool.query(
     `
     UPDATE users
     SET
       plan = $1,
-      credits = $2,
+      credits = CASE
+        WHEN plan = $1 AND NOT $4 THEN credits
+        ELSE $2
+      END,
       extra_credits = CASE
         WHEN plan = $1 THEN extra_credits
         ELSE 0
       END,
-      last_credit_reset = NOW()
+      last_credit_reset = CASE
+        WHEN plan = $1 AND NOT $4 THEN last_credit_reset
+        ELSE NOW()
+      END,
+      subscription_expires_at = $5,
+      subscription_environment = $6,
+      subscription_product_id = $7,
+      subscription_last_synced_at = NOW()
     WHERE id = $3
     `,
-    [nextPlan, PLAN_LIMITS[nextPlan] || PLAN_LIMITS.free, userId]
+    [
+      nextPlan,
+      PLAN_LIMITS[nextPlan] || PLAN_LIMITS.free,
+      userId,
+      refillCredits,
+      expiresAt,
+      environment,
+      productId,
+    ]
   );
 
   return {
@@ -280,6 +299,17 @@ async function handleRevenueCatWebhookEvent(event) {
       ? [event.entitlement_id]
       : [];
   const productId = event?.product_id || "";
+  const expirationCandidates = [
+    Number(event?.expiration_at_ms),
+    Number(event?.grace_period_expiration_at_ms),
+  ].filter((value) => Number.isFinite(value) && value > 0);
+  const expirationAtMs = expirationCandidates.length
+    ? Math.max(...expirationCandidates)
+    : null;
+  const expiresAt = expirationAtMs
+    ? new Date(expirationAtMs).toISOString()
+    : null;
+  const environment = String(event?.environment || "").trim() || null;
 
   let nextPlan = null;
 
@@ -298,6 +328,8 @@ async function handleRevenueCatWebhookEvent(event) {
       break;
     case "CANCELLATION":
     case "BILLING_ISSUE":
+      nextPlan = getPlanFromRevenueCatEntitlements(entitlementIds, productId);
+      break;
     case "TRANSFER":
     default:
       return;
@@ -311,6 +343,9 @@ async function handleRevenueCatWebhookEvent(event) {
   for (const userId of candidateUserIds) {
     const syncResult = await updateUserPlanFromRevenueCat(userId, nextPlan, {
       refillCredits: shouldRefillCredits,
+      expiresAt,
+      environment,
+      productId: productId || null,
     });
     if (syncResult.updated) {
       console.log(

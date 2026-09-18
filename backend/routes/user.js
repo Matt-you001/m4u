@@ -2,6 +2,10 @@ import bcrypt from "bcrypt";
 import express from "express";
 import { pool } from "../db.js";
 import { PLAN_CREDITS, refreshCreditsIfDue } from "../lib/planCredits.js";
+import {
+  getRevenueCatActiveEntitlements,
+  isRevenueCatServerVerificationConfigured,
+} from "../lib/revenueCat.js";
 import { authenticateUser } from "../middleware/auth.js";
 
 const router = express.Router();
@@ -53,6 +57,171 @@ function getPlanFromRevenueCatSnapshot(entitlementIds = [], productIds = []) {
   return "free";
 }
 
+function normalizeRevenueCatEntitlements(entitlements = []) {
+  const now = Date.now();
+
+  return entitlements
+    .map((entitlement) => {
+      const expirationMs = entitlement?.expirationDate
+        ? Date.parse(entitlement.expirationDate)
+        : null;
+
+      return {
+        identifier: String(entitlement?.identifier || "").trim(),
+        productIdentifier: String(
+          entitlement?.productIdentifier || ""
+        ).trim(),
+        isActive: entitlement?.isActive === true,
+        isSandbox: entitlement?.isSandbox === true,
+        expirationMs:
+          Number.isFinite(expirationMs) && expirationMs > 0
+            ? expirationMs
+            : null,
+      };
+    })
+    .filter(
+      (entitlement) =>
+        entitlement.identifier &&
+        entitlement.isActive &&
+        (entitlement.expirationMs === null || entitlement.expirationMs > now)
+    );
+}
+
+function getSubscriptionMetadata(entitlements = []) {
+  const expirationTimes = entitlements
+    .map((entitlement) => entitlement.expirationMs)
+    .filter((value) => Number.isFinite(value));
+  const latestExpirationMs = expirationTimes.length
+    ? Math.max(...expirationTimes)
+    : null;
+
+  return {
+    expiresAt: latestExpirationMs
+      ? new Date(latestExpirationMs).toISOString()
+      : null,
+    environment: entitlements.some((entitlement) => entitlement.isSandbox)
+      ? "SANDBOX"
+      : entitlements.length
+        ? "PRODUCTION"
+        : null,
+    productId:
+      entitlements.find((entitlement) =>
+        entitlement.productIdentifier.toLowerCase().includes("premium")
+      )?.productIdentifier ||
+      entitlements[0]?.productIdentifier ||
+      null,
+  };
+}
+
+async function persistSubscriptionSnapshot(
+  userId,
+  {
+    activeEntitlements = [],
+    entitlementIds = [],
+    productIds = [],
+    hasDetailedEntitlements = false,
+    serverVerified = false,
+  } = {}
+) {
+  const effectiveEntitlementIds = hasDetailedEntitlements
+    ? activeEntitlements.map((entitlement) => entitlement.identifier)
+    : entitlementIds;
+  const effectiveProductIds = hasDetailedEntitlements
+    ? activeEntitlements.map((entitlement) => entitlement.productIdentifier)
+    : productIds;
+  const syncedPlan = getPlanFromRevenueCatSnapshot(
+    effectiveEntitlementIds,
+    effectiveProductIds
+  );
+  const subscriptionMetadata = hasDetailedEntitlements
+    ? getSubscriptionMetadata(activeEntitlements)
+    : { expiresAt: null, environment: null, productId: null };
+
+  await pool.query(
+    `
+    UPDATE users
+    SET
+      plan = $1,
+      credits = CASE
+        WHEN plan = $1 THEN credits
+        ELSE $2
+      END,
+      extra_credits = CASE
+        WHEN plan = $1 THEN extra_credits
+        ELSE 0
+      END,
+      last_credit_reset = CASE
+        WHEN plan = $1 THEN last_credit_reset
+        ELSE NOW()
+      END,
+      subscription_expires_at = CASE
+        WHEN $7 THEN $3
+        ELSE subscription_expires_at
+      END,
+      subscription_environment = CASE
+        WHEN $7 THEN $4
+        ELSE subscription_environment
+      END,
+      subscription_product_id = CASE
+        WHEN $7 THEN $5
+        ELSE subscription_product_id
+      END,
+      subscription_last_synced_at = NOW(),
+      subscription_server_verified_at = CASE
+        WHEN $8 THEN NOW()
+        ELSE subscription_server_verified_at
+      END
+    WHERE id = $6
+    `,
+    [
+      syncedPlan,
+      PLAN_LIMITS[syncedPlan],
+      subscriptionMetadata.expiresAt,
+      subscriptionMetadata.environment,
+      subscriptionMetadata.productId,
+      userId,
+      hasDetailedEntitlements,
+      serverVerified,
+    ]
+  );
+
+  return syncedPlan;
+}
+
+async function refreshSubscriptionFromRevenueCatServer(userId) {
+  if (!isRevenueCatServerVerificationConfigured()) {
+    return null;
+  }
+
+  const verificationStatus = await pool.query(
+    `
+    SELECT subscription_server_verified_at
+    FROM users
+    WHERE id = $1
+    `,
+    [userId]
+  );
+  const lastVerifiedAt = verificationStatus.rows[0]?.subscription_server_verified_at;
+
+  if (
+    lastVerifiedAt &&
+    Date.now() - new Date(lastVerifiedAt).getTime() < 5 * 60 * 1000
+  ) {
+    return null;
+  }
+
+  const serverEntitlements = await getRevenueCatActiveEntitlements(userId);
+  const activeEntitlements = normalizeRevenueCatEntitlements(
+    serverEntitlements || []
+  );
+
+  return persistSubscriptionSnapshot(userId, {
+    activeEntitlements,
+    hasDetailedEntitlements: true,
+    serverVerified: true,
+  });
+}
+
 router.post("/upgrade", authenticateUser, async (req, res) => {
   return res.status(403).json({
     error: "Plan changes must be verified through RevenueCat",
@@ -64,6 +233,12 @@ router.post("/upgrade", authenticateUser, async (req, res) => {
  */
 router.get("/me", authenticateUser, async (req, res) => {
   try {
+    try {
+      await refreshSubscriptionFromRevenueCatServer(req.user.id);
+    } catch (error) {
+      console.error("RevenueCat /user/me verification failed:", error);
+    }
+
     await refreshCreditsIfDue(req.user.id);
 
     const { rows } = await pool.query(
@@ -77,6 +252,12 @@ router.get("/me", authenticateUser, async (req, res) => {
         plan,
         credits,
         extra_credits,
+        last_credit_reset,
+        subscription_expires_at,
+        subscription_environment,
+        subscription_product_id,
+        subscription_last_synced_at,
+        subscription_server_verified_at,
         referral_code,
         COALESCE((
           SELECT COUNT(*)::int
@@ -112,6 +293,12 @@ router.get("/me", authenticateUser, async (req, res) => {
       usedCredits,
       referralCode: user.referral_code || `M4U${user.id}`,
       successfulReferrals: Number(user.successful_referrals) || 0,
+      subscriptionExpiresAt: user.subscription_expires_at,
+      subscriptionEnvironment: user.subscription_environment,
+      subscriptionProductId: user.subscription_product_id,
+      subscriptionLastSyncedAt: user.subscription_last_synced_at,
+      subscriptionServerVerifiedAt: user.subscription_server_verified_at,
+      lastCreditReset: user.last_credit_reset,
     });
   } catch (err) {
     console.error("ME endpoint error:", err);
@@ -250,6 +437,25 @@ router.post("/change-password", authenticateUser, async (req, res) => {
 router.post("/sync-subscription", authenticateUser, async (req, res) => {
   try {
     const userId = req.user.id;
+    const hasClientEntitlements = Array.isArray(req.body?.entitlements);
+    const clientEntitlements = hasClientEntitlements
+      ? normalizeRevenueCatEntitlements(req.body.entitlements)
+      : [];
+    let serverEntitlements = null;
+
+    if (isRevenueCatServerVerificationConfigured()) {
+      try {
+        serverEntitlements = await getRevenueCatActiveEntitlements(userId);
+      } catch (error) {
+        console.error("RevenueCat server verification failed:", error);
+      }
+    }
+
+    const hasDetailedEntitlements = Array.isArray(serverEntitlements)
+      || hasClientEntitlements;
+    const activeEntitlements = Array.isArray(serverEntitlements)
+      ? normalizeRevenueCatEntitlements(serverEntitlements)
+      : clientEntitlements;
     const entitlementIds = Array.isArray(req.body?.entitlementIds)
       ? req.body.entitlementIds
       : [];
@@ -257,29 +463,13 @@ router.post("/sync-subscription", authenticateUser, async (req, res) => {
       ? req.body.productIds
       : [];
 
-    const syncedPlan = getPlanFromRevenueCatSnapshot(entitlementIds, productIds);
-
-    await pool.query(
-      `
-      UPDATE users
-      SET
-        plan = $1,
-        credits = CASE
-          WHEN plan = $1 THEN credits
-          ELSE $2
-        END,
-        extra_credits = CASE
-          WHEN plan = $1 THEN extra_credits
-          ELSE 0
-        END,
-        last_credit_reset = CASE
-          WHEN plan = $1 THEN last_credit_reset
-          ELSE NOW()
-        END
-      WHERE id = $3
-      `,
-      [syncedPlan, PLAN_LIMITS[syncedPlan], userId]
-    );
+    await persistSubscriptionSnapshot(userId, {
+      activeEntitlements,
+      entitlementIds,
+      productIds,
+      hasDetailedEntitlements,
+      serverVerified: Array.isArray(serverEntitlements),
+    });
 
     await refreshCreditsIfDue(userId);
 
@@ -294,6 +484,12 @@ router.post("/sync-subscription", authenticateUser, async (req, res) => {
         plan,
         credits,
         extra_credits,
+        last_credit_reset,
+        subscription_expires_at,
+        subscription_environment,
+        subscription_product_id,
+        subscription_last_synced_at,
+        subscription_server_verified_at,
         referral_code,
         COALESCE((
           SELECT COUNT(*)::int
@@ -330,6 +526,12 @@ router.post("/sync-subscription", authenticateUser, async (req, res) => {
       usedCredits,
       referralCode: user.referral_code || `M4U${user.id}`,
       successfulReferrals: Number(user.successful_referrals) || 0,
+      subscriptionExpiresAt: user.subscription_expires_at,
+      subscriptionEnvironment: user.subscription_environment,
+      subscriptionProductId: user.subscription_product_id,
+      subscriptionLastSyncedAt: user.subscription_last_synced_at,
+      subscriptionServerVerifiedAt: user.subscription_server_verified_at,
+      lastCreditReset: user.last_credit_reset,
     });
   } catch (err) {
     console.error("Subscription sync error:", err);

@@ -28,6 +28,16 @@ let isCustomerInfoListenerRegistered = false;
 
 type RevenueCatCustomerInfo = Awaited<ReturnType<typeof Purchases.getCustomerInfo>>;
 
+function getLatestIsoDate(...values: (string | null | undefined)[]) {
+  const validDates = values
+    .map((value) => (value ? Date.parse(value) : Number.NaN))
+    .filter((value) => Number.isFinite(value));
+
+  return validDates.length
+    ? new Date(Math.max(...validDates)).toISOString()
+    : null;
+}
+
 async function syncCustomerInfoToBackend(
   customerInfo: RevenueCatCustomerInfo,
   reason: string
@@ -35,10 +45,33 @@ async function syncCustomerInfoToBackend(
   try {
     const entitlementIds = Object.keys(customerInfo.entitlements.active || {});
     const productIds = Array.from(customerInfo.activeSubscriptions || []);
+    const entitlements = Object.values(customerInfo.entitlements.all || {}).map(
+      (entitlement) => {
+        const subscription =
+          customerInfo.subscriptionsByProductIdentifier?.[
+            entitlement.productIdentifier
+          ];
+
+        return {
+          identifier: entitlement.identifier,
+          productIdentifier: entitlement.productIdentifier,
+          isActive: entitlement.isActive,
+          isSandbox: entitlement.isSandbox,
+          expirationDate: getLatestIsoDate(
+            entitlement.expirationDate,
+            subscription?.gracePeriodExpiresDate
+          ),
+          willRenew: entitlement.willRenew,
+          periodType: entitlement.periodType,
+        };
+      }
+    );
 
     const response = await api.post("/user/sync-subscription", {
       entitlementIds,
       productIds,
+      entitlements,
+      customerInfoRequestDate: customerInfo.requestDate,
       originalAppUserId: customerInfo.originalAppUserId,
     });
 
@@ -47,6 +80,8 @@ async function syncCustomerInfoToBackend(
       totalCredits: response.data?.totalCredits,
       entitlementIds,
       productIds,
+      entitlements,
+      customerInfoRequestDate: customerInfo.requestDate,
     });
 
     return response.data;
@@ -76,6 +111,7 @@ function registerCustomerInfoListener() {
 async function syncRevenueCatPurchases(reason: string) {
   try {
     await Purchases.syncPurchases();
+    await Purchases.invalidateCustomerInfoCache();
     const customerInfo = await Purchases.getCustomerInfo();
 
     console.log("RevenueCat purchases synced:", reason, {
