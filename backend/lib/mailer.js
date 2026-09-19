@@ -1,6 +1,6 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let resend = null;
 
 function assertMailerConfig() {
   if (!process.env.RESEND_API_KEY) {
@@ -8,11 +8,20 @@ function assertMailerConfig() {
   }
 }
 
-async function sendEmail({ email, subject, html }) {
+function getResend() {
   assertMailerConfig();
+
+  if (!resend) {
+    resend = new Resend(process.env.RESEND_API_KEY);
+  }
+
+  return resend;
+}
+
+async function sendEmail({ email, subject, html }) {
   const fromEmail = process.env.EMAIL_FROM || "m4U <no-reply@notifications.techsolutionproviders.net>";
 
-  const { error } = await resend.emails.send({
+  const { error } = await getResend().emails.send({
     from: fromEmail,
     to: [email],
     subject,
@@ -68,15 +77,13 @@ export async function sendFeedbackEmail({
   rating,
   message,
 }) {
-  assertMailerConfig();
-
   const fromEmail =
     process.env.EMAIL_FROM ||
     "m4U <no-reply@notifications.techsolutionproviders.net>";
   const feedbackRecipient =
     process.env.FEEDBACK_EMAIL_TO || "contact@techsolutionproviders.net";
 
-  const { error } = await resend.emails.send({
+  const { error } = await getResend().emails.send({
     from: fromEmail,
     to: [feedbackRecipient],
     replyTo: email,

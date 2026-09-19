@@ -21,8 +21,20 @@ import userRoutes from "./routes/user.js";
 
 const app = express();
 
+const startupState = {
+  databaseReady: false,
+  maintenanceReady: false,
+  lastError: null,
+};
+
 app.get("/health", (req, res) => {
-  res.status(200).json({ ok: true, ts: Date.now() });
+  res.status(200).json({
+    ok: true,
+    databaseReady: startupState.databaseReady,
+    maintenanceReady: startupState.maintenanceReady,
+    startupError: startupState.lastError,
+    ts: Date.now(),
+  });
 });
 
 app.use((req, res, next) => {
@@ -1908,33 +1920,58 @@ app.post("/translate", authenticateUser, creditGuard, async (req, res) => {
 const PORT = process.env.PORT || 10000;
 
 async function startServer() {
-  await ensureAuthSchema();
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
 
-  const initiallyRefreshed = await refreshAllDueCredits();
-  if (initiallyRefreshed > 0) {
-    console.log(`Monthly credits refreshed for ${initiallyRefreshed} users on startup`);
+  try {
+    await ensureAuthSchema();
+    startupState.databaseReady = true;
+  } catch (error) {
+    startupState.lastError = "Database initialization failed";
+    console.error(
+      "Database initialization failed; server remains available for diagnostics:",
+      error
+    );
+    return;
+  }
+
+  try {
+    const initiallyRefreshed = await refreshAllDueCredits();
+    startupState.maintenanceReady = true;
+    startupState.lastError = null;
+
+    if (initiallyRefreshed > 0) {
+      console.log(`Monthly credits refreshed for ${initiallyRefreshed} users on startup`);
+    }
+  } catch (error) {
+    startupState.lastError = "Initial credit maintenance failed";
+    console.error(
+      "Initial credit maintenance failed; authentication remains available:",
+      error
+    );
   }
 
   const creditRefreshTimer = setInterval(async () => {
     try {
       const refreshedUsers = await refreshAllDueCredits();
+      startupState.maintenanceReady = true;
+      startupState.lastError = null;
       if (refreshedUsers > 0) {
         console.log(`Monthly credits refreshed for ${refreshedUsers} users`);
       }
     } catch (error) {
+      startupState.maintenanceReady = false;
+      startupState.lastError = "Scheduled credit maintenance failed";
       console.error("Scheduled monthly credit refresh failed:", error);
     }
   }, 60 * 60 * 1000);
   creditRefreshTimer.unref();
-
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
 }
 
 startServer().catch((error) => {
-  console.error("Failed to start server:", error);
-  process.exit(1);
+  startupState.lastError = "Unexpected startup failure";
+  console.error("Unexpected startup failure; server remains available:", error);
 });
 
 // ================= EXPORT =================
