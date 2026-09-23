@@ -63,13 +63,7 @@ const OTP_MAX_ATTEMPTS = 5;
 const PLAN_LIMITS = PLAN_CREDITS;
 
 function isStrongPassword(password) {
-  return (
-    password.length >= 8 &&
-    /[A-Z]/.test(password) &&
-    /[a-z]/.test(password) &&
-    /[0-9]/.test(password) &&
-    /[^A-Za-z0-9]/.test(password)
-  );
+  return typeof password === "string" && password.length >= 6;
 }
 
 function generateOtpCode() {
@@ -437,8 +431,7 @@ app.post("/auth/signup", async (req, res) => {
 
     if (!isStrongPassword(password)) {
       return res.status(400).json({
-        message:
-          "Password must be at least 8 characters and include uppercase, lowercase, number, and special character",
+        message: "Password must be at least 6 characters",
       });
     }
 
@@ -826,8 +819,7 @@ app.post("/auth/reset-password", async (req, res) => {
 
     if (!isStrongPassword(password)) {
       return res.status(400).json({
-        message:
-          "Password must be at least 8 characters and include uppercase, lowercase, number, and special character",
+        message: "Password must be at least 6 characters",
       });
     }
 

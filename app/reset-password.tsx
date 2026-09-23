@@ -38,11 +38,7 @@ export default function ResetPassword() {
 
   const passwordChecks = useMemo(() => {
     return {
-      length: password.length >= 8,
-      uppercase: /[A-Z]/.test(password),
-      lowercase: /[a-z]/.test(password),
-      number: /[0-9]/.test(password),
-      special: /[^A-Za-z0-9]/.test(password),
+      length: password.length >= 6,
     };
   }, [password]);
 
@@ -61,7 +57,7 @@ export default function ResetPassword() {
     }
 
     if (!isStrongPassword) {
-      setError("Password is not strong enough");
+      setError("Password must be at least 6 characters");
       return;
     }
 
@@ -194,11 +190,7 @@ export default function ResetPassword() {
         </View>
 
         <View style={styles.passwordRules}>
-          {renderCheck("At least 8 characters", passwordChecks.length)}
-          {renderCheck("Uppercase letter", passwordChecks.uppercase)}
-          {renderCheck("Lowercase letter", passwordChecks.lowercase)}
-          {renderCheck("Number", passwordChecks.number)}
-          {renderCheck("Special character", passwordChecks.special)}
+          {renderCheck("At least 6 characters", passwordChecks.length)}
         </View>
 
         {!!error && <Text style={styles.error}>{error}</Text>}
