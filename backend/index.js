@@ -32,6 +32,7 @@ app.get("/health", (req, res) => {
     ok: true,
     databaseReady: startupState.databaseReady,
     maintenanceReady: startupState.maintenanceReady,
+    emailConfigured: Boolean(process.env.RESEND_API_KEY),
     startupError: startupState.lastError,
     ts: Date.now(),
   });
@@ -502,13 +503,22 @@ app.post("/auth/signup", async (req, res) => {
           ]
         );
 
-        await sendVerificationCodeEmail(normalizedEmail, verificationCode);
         await client.query("COMMIT");
 
+        let emailDeliveryPending = false;
+        try {
+          await sendVerificationCodeEmail(normalizedEmail, verificationCode);
+        } catch (emailError) {
+          emailDeliveryPending = true;
+          console.error("Verification email delivery failed:", emailError);
+        }
+
         return res.status(200).json({
-          message:
-            "This email is already registered but not yet verified. A new verification code has been sent.",
+          message: emailDeliveryPending
+            ? "Your account is ready, but the verification email could not be sent. Tap resend on the verification screen."
+            : "This email is already registered but not yet verified. A new verification code has been sent.",
           requiresEmailVerification: true,
+          emailDeliveryPending,
           email: normalizedEmail,
         });
       }
@@ -554,13 +564,22 @@ app.post("/auth/signup", async (req, res) => {
 
     await ensureUserReferralCode(client, insertedUser.rows[0].id);
 
-    await sendVerificationCodeEmail(normalizedEmail, verificationCode);
-
     await client.query("COMMIT");
 
+    let emailDeliveryPending = false;
+    try {
+      await sendVerificationCodeEmail(normalizedEmail, verificationCode);
+    } catch (emailError) {
+      emailDeliveryPending = true;
+      console.error("Verification email delivery failed:", emailError);
+    }
+
     res.status(201).json({
-      message: "Account created successfully. Enter the verification code sent to your email.",
+      message: emailDeliveryPending
+        ? "Account created, but the verification email could not be sent. Tap resend on the verification screen."
+        : "Account created successfully. Enter the verification code sent to your email.",
       requiresEmailVerification: true,
+      emailDeliveryPending,
       email: normalizedEmail,
     });
   } catch (err) {
@@ -746,7 +765,16 @@ app.post("/auth/resend-verification-code", async (req, res) => {
       [hashOtpCode(verificationCode), getOtpExpiryDate(), user.id]
     );
 
-    await sendVerificationCodeEmail(normalizedEmail, verificationCode);
+    try {
+      await sendVerificationCodeEmail(normalizedEmail, verificationCode);
+    } catch (emailError) {
+      console.error("Verification email resend failed:", emailError);
+      return res.status(503).json({
+        code: "EMAIL_DELIVERY_FAILED",
+        message:
+          "We could not send the verification email right now. Please try again shortly.",
+      });
+    }
 
     res.json({ message: "A new verification code has been sent to your email." });
   } catch (err) {
@@ -1109,25 +1137,33 @@ app.post("/auth/google", async (req, res) => {
         referredByUserId = referrer.id;
       }
 
+      // Google accounts do not use password login, but the users table requires a hash.
+      const unusablePasswordHash = await bcrypt.hash(
+        crypto.randomBytes(32).toString("hex"),
+        10
+      );
+
       const insert = await pool.query(
         `
         INSERT INTO users (
           first_name,
           last_name,
           email,
+          password_hash,
           plan,
           credits,
           extra_credits,
           email_verified,
           referred_by_user_id
         )
-        VALUES ($1, $2, $3, 'free', 10, 0, true, $4)
+        VALUES ($1, $2, $3, $4, 'free', 10, 0, true, $5)
         RETURNING id, email, first_name, last_name, plan, credits, extra_credits, email_verified
         `,
         [
           firstName?.trim() || "",
           lastName?.trim() || "",
           normalizedEmail,
+          unusablePasswordHash,
           referredByUserId,
         ]
       );
